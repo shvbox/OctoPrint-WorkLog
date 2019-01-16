@@ -30,10 +30,10 @@ WorkLog.prototype.core.client = function apiClient() {
             return OctoPrint.get(jobUrl(id), opts);
         },
 
-        add(job, opts) {
-            const data = { job };
-            return OctoPrint.postJson(jobUrl(), data, opts);
-        },
+        //~ add(job, opts) {
+            //~ const data = { job };
+            //~ return OctoPrint.postJson(jobUrl(), data, opts);
+        //~ },
 
         update(id, job, opts) {
             const data = { job };

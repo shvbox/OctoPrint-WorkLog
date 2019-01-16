@@ -114,180 +114,14 @@ var Utils = function () {
 
     return Utils;
 }();
-/* global WorkLog  _ */
-
-WorkLog.prototype.core.bridge = function pluginBridge() {
-    var self = this;
-
-    self.core.bridge = {
-        allViewModels: {},
-
-        REQUIRED_VIEWMODELS: ['settingsViewModel', 'printerStateViewModel', 'loginStateViewModel', 'filesViewModel'],
-
-        BINDINGS: ['#tab_plugin_worklog'],
-
-        viewModel: function WorkLogViewModel(viewModels) {
-            self.core.bridge.allViewModels = _.object(self.core.bridge.REQUIRED_VIEWMODELS, viewModels);
-            self.core.callbacks.call(self);
-
-            Object.values(self.viewModels).forEach(function (viewModel) {
-                return viewModel.call(self);
-            });
-
-            return self;
-        }
-    };
-
-    return self.core.bridge;
-};
-/* global WorkLog Utils _ */
-
-WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
-    var self = this;
-
-    // self.onStartup = function onStartupCallback() {
-    // self.viewModels.warning.replaceFilamentView();
-    // };
-
-    // self.onBeforeBinding = function onBeforeBindingCallback() {
-    // self.viewModels.config.loadData();
-    // self.viewModels.selections.setArraySize();
-    // self.viewModels.selections.setSubscriptions();
-    // self.viewModels.warning.setSubscriptions();
-    // };
-
-    self.onStartupComplete = function onStartupCompleteCallback() {
-        var requests = [self.viewModels.userFilter.requestUsers, self.viewModels.userFilter.requestActiveUser, self.viewModels.printerFilter.requestPrinters, self.viewModels.printerFilter.requestActivePrinter, self.viewModels.jobs.requestActivePrinter, self.viewModels.jobs.requestJobs];
-
-        // We chain them because, e.g. selections depends on spools
-        Utils.runRequestChain(requests);
-    };
-
-    self.onDataUpdaterPluginMessage = function onDataUpdaterPluginMessageCallback(plugin, data) {
-        if (plugin !== 'worklog') return;
-
-        var messageType = data.type;
-        // const messageData = data.data;
-        // TODO needs improvement
-        if (messageType === 'data_changed') {
-            self.viewModels.userFilter.requestUsers();
-            self.viewModels.printerFilter.requestPrinters();
-            self.viewModels.jobs.requestActivePrinter();
-            self.viewModels.jobs.requestFiles();
-            self.viewModels.jobs.requestJobs();
-        }
-    };
-
-    self.onEventFileRemoved = function onFileRemoved(payload) {
-        self.onFilesUpdated(payload);
-    };
-
-    self.onEventFileAdded = function onFileAdded(payload) {
-        self.onFilesUpdated(payload);
-    };
-
-    self.onEventFolderRemoved = function onFolderRemoved(payload) {
-        self.onFilesUpdated(payload);
-    };
-
-    self.onFilesUpdated = function onFilesUpdatedHelper(payload) {
-        var type = payload.type;
-
-        if (!(type === undefined || _.contains(type, 'machinecode'))) return;
-
-        var requests = [self.viewModels.jobs.requestFiles, self.viewModels.jobs.requestJobs];
-        Utils.runRequestChain(requests);
-    };
-};
-/* global WorkLog OctoPrint */
-
-WorkLog.prototype.core.client = function apiClient() {
-    var self = this.core.client;
-
-    var pluginUrl = 'plugin/worklog';
-
-    var jobUrl = function apiJobNamespace(job) {
-        var url = pluginUrl + '/jobs';
-        return job === undefined ? url : url + '/' + job;
-    };
-
-    var userUrl = function apiUserNamespace(user) {
-        var url = pluginUrl + '/users';
-        return user === undefined ? url : url + '/' + user;
-    };
-
-    var printerUrl = function apiPrinterNamespace(printer) {
-        var url = pluginUrl + '/printers';
-        return printer === undefined ? url : url + '/' + printer;
-    };
-
-    self.job = {
-        list: function list() {
-            var force = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
-            var opts = arguments[1];
-
-            var query = force ? { force: force } : {};
-            return OctoPrint.getWithQuery(jobUrl(), query, opts);
-        },
-        get: function get(id, opts) {
-            return OctoPrint.get(jobUrl(id), opts);
-        },
-        add: function add(job, opts) {
-            var data = { job: job };
-            return OctoPrint.postJson(jobUrl(), data, opts);
-        },
-        update: function update(id, job, opts) {
-            var data = { job: job };
-            return OctoPrint.patchJson(jobUrl(id), data, opts);
-        },
-        delete: function _delete(id, opts) {
-            return OctoPrint.delete(jobUrl(id), opts);
-        }
-    };
-
-    self.user = {
-        list: function list() {
-            var force = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
-            var opts = arguments[1];
-
-            var query = force ? { force: force } : {};
-            return OctoPrint.getWithQuery(userUrl(), query, opts);
-        },
-        get: function get(id, opts) {
-            return OctoPrint.get(userUrl(id), opts);
-        }
-    };
-
-    self.printer = {
-        list: function list() {
-            var force = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
-            var opts = arguments[1];
-
-            var query = force ? { force: force } : {};
-            return OctoPrint.getWithQuery(printerUrl(), query, opts);
-        },
-        get: function get(id, opts) {
-            return OctoPrint.get(printerUrl(id), opts);
-        }
-    };
-
-    self.database = {
-        test: function test(config, opts) {
-            var url = pluginUrl + '/database/test';
-            var data = { config: config };
-            return OctoPrint.postJson(url, data, opts);
-        }
-    };
-};
 /* global WorkLog ItemListHelper ko gettext Utils OctoPrint _ */
 
 WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     var self = this.viewModels.jobs;
     var api = this.core.client;
 
-    //    const printerState = this.core.bridge.allViewModels.printerStateViewModel;
-    //    const loginState = this.core.bridge.allViewModels.loginStateViewModel;
-    var files = this.core.bridge.allViewModels.filesViewModel;
+    var filesLib = this.core.bridge.allViewModels.filesViewModel;
+    var connLib = this.core.bridge.allViewModels.connectionViewModel;
 
     var fltUser = this.viewModels.userFilter;
     var fltPrinter = this.viewModels.printerFilter;
@@ -295,12 +129,17 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     var fltPeriod = this.viewModels.periodFilter;
 
     self.activePrinter = undefined;
+    self.octoprintFiles = undefined;
+
+    self.requestInProgress = ko.observable(false);
     self.searchQuery = ko.observable(undefined);
     self.searchQuery.subscribe(function () {
         self.performSearch();
     });
 
-    self.octoprintFiles = undefined;
+    connLib.selectedPrinter.subscribe(function () {
+        self.processActivePrinter();
+    });
 
     self.allJobs = new ItemListHelper('worklogHistory', {
         fileAsc: function fileAsc(a, b) {
@@ -406,7 +245,7 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     };
 
     self.showPrintAgain = function canPrintAgain(item) {
-        if (item.printer === self.activePrinter && files.enablePrint()) {
+        if (item.printer === self.activePrinter && filesLib.enablePrint() && self.octoprintFiles) {
             return _.contains(self.octoprintFiles[item.origin], item.path);
         }
 
@@ -418,12 +257,12 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             return;
         }
 
-        if (files.listHelper.isSelected(data) && files.enablePrint(data)) {
+        if (filesLib.listHelper.isSelected(data) && filesLib.enablePrint(data)) {
             // file was already selected, just start the print job
             OctoPrint.job.start();
         } else {
             // select file, start print job (if requested and within dimensions)
-            var print = files.evaluatePrintDimensions(data, true);
+            var print = filesLib.evaluatePrintDimensions(data, true);
 
             OctoPrint.files.select(data.origin, data.path, print);
         }
@@ -465,8 +304,6 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         return self.requestInProgress() || fltPrinter.requestInProgress() || fltUser.requestInProgress();
     });
 
-    self.requestInProgress = ko.observable(false);
-
     self.processJobs = function processRequestedJobs(data) {
         self.allJobs.updateItems(data.jobs);
     };
@@ -480,22 +317,17 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         });
     };
 
-    self.processActivePrinter = function processRequestedActivePrinter(data) {
-        var printer = data.printer;
-
-        if (printer !== undefined) {
-            self.activePrinter = printer.name;
-        }
+    self.processActivePrinter = function processActivePrinterChange() {
+        profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
+        self.activePrinter = profile ? profile.name : undefined;
     };
-
-    self.requestActivePrinter = function requestActivePrinterFromBackend() {
-        self.requestInProgress(true);
-        return api.printer.get('@').done(function (response) {
-            self.processActivePrinter(response);
-        }).always(function () {
-            self.requestInProgress(false);
-        });
-    };
+    //~ 
+    //~ self.requestActivePrinter = function requestActivePrinterFromBackend() {
+    //~ self.requestInProgress(true);
+    //~ return api.printer.get('@')
+    //~ .done((response) => { self.processActivePrinter(response); })
+    //~ .always(() => { self.requestInProgress(false); });
+    //~ };
 
     self.updateOctoprintFiles = function updateOctoprintFilesRecursively(entry) {
         if (entry.type === 'folder') {
@@ -512,13 +344,12 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             local: [],
             sdcard: []
         };
-
         _.each(data.files, function (entry) {
             self.updateOctoprintFiles(entry);
         });
     };
 
-    self.requestFiles = function requestOctorintFiles() {
+    self.requestFiles = function requestOctoprintFiles() {
         self.requestInProgress(true);
         return OctoPrint.files.list(true).done(function (response) {
             self.processOctoprintFiles(response);
@@ -588,9 +419,16 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
     var api = this.core.client;
     var history = this.viewModels.jobs;
 
+    var connLib = this.core.bridge.allViewModels.connectionViewModel;
+
     self.allItems = ko.observableArray([]);
     self.selected = ko.observable();
     self.requestInProgress = ko.observable(false);
+
+    self.printerChanged = false;
+    connLib.selectedPrinter.subscribe(function () {
+        self.printerChanged = true;
+    });
 
     history.allJobs.addFilter('printer');
 
@@ -604,23 +442,13 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
 
         if (printers === undefined) printers = [];
         self.allItems(printers);
-    };
 
-    self.processActivePrinter = function processRequestedActivePrinter(data) {
-        var printer = data.printer;
+        if (self.printerChanged) {
+            profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
+            self.selected(profile ? profile.name : undefined);
 
-        if (printer !== undefined) {
-            self.selected(printer.name);
+            self.printerChanged = false;
         }
-    };
-
-    self.requestActivePrinter = function requestActivePrinterFromBackend() {
-        self.requestInProgress(true);
-        return api.printer.get('@').done(function (response) {
-            self.processActivePrinter(response);
-        }).always(function () {
-            self.requestInProgress(false);
-        });
     };
 
     self.requestPrinters = function requestAllPrintersFromBackend(force) {
@@ -647,16 +475,23 @@ WorkLog.prototype.viewModels.statusFilter = function statusFilterViewModel() {
         history.allJobs.currentPage(0);
     };
 };
-/* global WorkLog ko */
+/* global WorkLog ko Utils */
 
 WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
     var self = this.viewModels.userFilter;
     var api = this.core.client;
     var history = this.viewModels.jobs;
 
+    var loginLib = this.core.bridge.allViewModels.loginStateViewModel;
+
     self.allItems = ko.observableArray([]);
     self.selected = ko.observable();
     self.requestInProgress = ko.observable(false);
+
+    self.userChanged = false;
+    loginLib.currentUser.subscribe(function () {
+        self.userChanged = true;
+    });
 
     history.allJobs.addFilter('user');
 
@@ -670,23 +505,12 @@ WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
 
         if (users === undefined) users = [];
         self.allItems(users);
-    };
 
-    self.processActiveUser = function processRequestedActiveUser(data) {
-        var user = data.user;
-
-        if (user !== undefined) {
-            self.selected(user.name);
+        if (self.userChanged) {
+            var user = loginLib.currentUser();
+            self.selected(user ? user.name : undefined);
+            self.userChanged = false;
         }
-    };
-
-    self.requestActiveUser = function requestActiveUserFromBackend() {
-        self.requestInProgress(true);
-        return api.user.get('@').done(function (response) {
-            self.processActiveUser(response);
-        }).always(function () {
-            self.requestInProgress(false);
-        });
     };
 
     self.requestUsers = function requestAllUsersFromBackend(force) {
@@ -696,6 +520,182 @@ WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
         }).always(function () {
             self.requestInProgress(false);
         });
+    };
+};
+/* global WorkLog  _ */
+
+WorkLog.prototype.core.bridge = function pluginBridge() {
+    var self = this;
+
+    self.core.bridge = {
+        allViewModels: {},
+
+        REQUIRED_VIEWMODELS: ['settingsViewModel', 'printerStateViewModel', 'loginStateViewModel', 'filesViewModel', 'connectionViewModel'],
+
+        BINDINGS: ['#tab_plugin_worklog'],
+
+        viewModel: function WorkLogViewModel(viewModels) {
+            self.core.bridge.allViewModels = _.object(self.core.bridge.REQUIRED_VIEWMODELS, viewModels);
+            self.core.callbacks.call(self);
+
+            Object.values(self.viewModels).forEach(function (viewModel) {
+                return viewModel.call(self);
+            });
+
+            return self;
+        }
+    };
+
+    return self.core.bridge;
+};
+/* global WorkLog Utils _ */
+
+WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
+    var self = this;
+    var usersLib = this.core.bridge.allViewModels.loginStateViewModel;
+
+    // self.onStartup = function onStartupCallback() {
+    // self.viewModels.warning.replaceFilamentView();
+    // };
+
+    // self.onBeforeBinding = function onBeforeBindingCallback() {
+    // self.viewModels.config.loadData();
+    // self.viewModels.selections.setArraySize();
+    // self.viewModels.selections.setSubscriptions();
+    // self.viewModels.warning.setSubscriptions();
+    // };
+
+    self.onStartupComplete = function onStartupCompleteCallback() {
+        var requests = [self.viewModels.userFilter.requestUsers, self.viewModels.printerFilter.requestPrinters,
+        //~ self.viewModels.printerFilter.requestActivePrinter,
+        //~ self.viewModels.jobs.requestActivePrinter,
+        self.viewModels.jobs.requestFiles, self.viewModels.jobs.requestJobs];
+
+        // We chain them because, e.g. selections depends on spools
+        Utils.runRequestChain(requests);
+    };
+
+    self.onDataUpdaterPluginMessage = function onDataUpdaterPluginMessageCallback(plugin, data) {
+        if (plugin !== 'worklog') return;
+
+        var messageType = data.type;
+        // const messageData = data.data;
+        // TODO needs improvement
+        if (messageType === 'data_changed') {
+            self.viewModels.userFilter.requestUsers();
+            self.viewModels.printerFilter.requestPrinters();
+            //~ self.viewModels.jobs.requestActivePrinter();
+            self.viewModels.jobs.requestFiles();
+            self.viewModels.jobs.requestJobs();
+        }
+    };
+
+    self.onEventPrintStarted = function onPrintStarted(data) {
+        console.log(': ' + data.path + ', ' + usersLib.currentUser().name);
+    };
+
+    self.onEventFileRemoved = function onFileRemoved(data) {
+        self.onFilesUpdated(data);
+    };
+
+    self.onEventFileAdded = function onFileAdded(data) {
+        self.onFilesUpdated(data);
+    };
+
+    self.onEventFolderRemoved = function onFolderRemoved(data) {
+        self.onFilesUpdated(data);
+    };
+
+    self.onFilesUpdated = function onFilesUpdatedHelper(data) {
+        var type = data.type;
+
+        if (!(type === undefined || _.contains(type, 'machinecode'))) return;
+
+        var requests = [self.viewModels.jobs.requestFiles, self.viewModels.jobs.requestJobs];
+        Utils.runRequestChain(requests);
+    };
+};
+/* global WorkLog OctoPrint */
+
+WorkLog.prototype.core.client = function apiClient() {
+    var self = this.core.client;
+
+    var pluginUrl = 'plugin/worklog';
+
+    var jobUrl = function apiJobNamespace(job) {
+        var url = pluginUrl + '/jobs';
+        return job === undefined ? url : url + '/' + job;
+    };
+
+    var userUrl = function apiUserNamespace(user) {
+        var url = pluginUrl + '/users';
+        return user === undefined ? url : url + '/' + user;
+    };
+
+    var printerUrl = function apiPrinterNamespace(printer) {
+        var url = pluginUrl + '/printers';
+        return printer === undefined ? url : url + '/' + printer;
+    };
+
+    self.job = {
+        list: function list() {
+            var force = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
+            var opts = arguments[1];
+
+            var query = force ? { force: force } : {};
+            return OctoPrint.getWithQuery(jobUrl(), query, opts);
+        },
+        get: function get(id, opts) {
+            return OctoPrint.get(jobUrl(id), opts);
+        },
+
+
+        //~ add(job, opts) {
+        //~ const data = { job };
+        //~ return OctoPrint.postJson(jobUrl(), data, opts);
+        //~ },
+
+        update: function update(id, job, opts) {
+            var data = { job: job };
+            return OctoPrint.patchJson(jobUrl(id), data, opts);
+        },
+        delete: function _delete(id, opts) {
+            return OctoPrint.delete(jobUrl(id), opts);
+        }
+    };
+
+    self.user = {
+        list: function list() {
+            var force = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
+            var opts = arguments[1];
+
+            var query = force ? { force: force } : {};
+            return OctoPrint.getWithQuery(userUrl(), query, opts);
+        },
+        get: function get(id, opts) {
+            return OctoPrint.get(userUrl(id), opts);
+        }
+    };
+
+    self.printer = {
+        list: function list() {
+            var force = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
+            var opts = arguments[1];
+
+            var query = force ? { force: force } : {};
+            return OctoPrint.getWithQuery(printerUrl(), query, opts);
+        },
+        get: function get(id, opts) {
+            return OctoPrint.get(printerUrl(id), opts);
+        }
+    };
+
+    self.database = {
+        test: function test(config, opts) {
+            var url = pluginUrl + '/database/test';
+            var data = { config: config };
+            return OctoPrint.postJson(url, data, opts);
+        }
     };
 };
 /* global WorkLog OCTOPRINT_VIEWMODELS */

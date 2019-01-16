@@ -1,16 +1,21 @@
-/* global WorkLog ko */
+/* global WorkLog ko Utils */
 
 WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
     const self = this.viewModels.userFilter;
     const api = this.core.client;
     const history = this.viewModels.jobs;
-
+    
+    const loginLib = this.core.bridge.allViewModels.loginStateViewModel;
+    
     self.allItems = ko.observableArray([]);
     self.selected = ko.observable();
     self.requestInProgress = ko.observable(false);
+    
+    self.userChanged = false;
+    loginLib.currentUser.subscribe(() => { self.userChanged = true; });
 
     history.allJobs.addFilter('user');
-
+    
     self.changed = function userFilterChanged() {
         history.allJobs.refresh();
         history.allJobs.currentPage(0);
@@ -20,20 +25,12 @@ WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
         let { users } = data;
         if (users === undefined) users = [];
         self.allItems(users);
-    };
-
-    self.processActiveUser = function processRequestedActiveUser(data) {
-        const { user } = data;
-        if (user !== undefined) {
-            self.selected(user.name);
+        
+        if (self.userChanged) {
+            const user = loginLib.currentUser();
+            self.selected(user ? user.name : undefined);
+            self.userChanged = false;
         }
-    };
-
-    self.requestActiveUser = function requestActiveUserFromBackend() {
-        self.requestInProgress(true);
-        return api.user.get('@')
-            .done((response) => { self.processActiveUser(response); })
-            .always(() => { self.requestInProgress(false); });
     };
 
     self.requestUsers = function requestAllUsersFromBackend(force) {

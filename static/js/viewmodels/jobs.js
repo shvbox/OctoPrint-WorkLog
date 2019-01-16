@@ -4,9 +4,8 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     const self = this.viewModels.jobs;
     const api = this.core.client;
 
-//    const printerState = this.core.bridge.allViewModels.printerStateViewModel;
-//    const loginState = this.core.bridge.allViewModels.loginStateViewModel;
-    const files = this.core.bridge.allViewModels.filesViewModel;
+    const filesLib = this.core.bridge.allViewModels.filesViewModel;
+    const connLib = this.core.bridge.allViewModels.connectionViewModel;
 
     const fltUser = this.viewModels.userFilter;
     const fltPrinter = this.viewModels.printerFilter;
@@ -14,10 +13,13 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     const fltPeriod = this.viewModels.periodFilter;
 
     self.activePrinter = undefined;
+    self.octoprintFiles = undefined;
+
+    self.requestInProgress = ko.observable(false);
     self.searchQuery = ko.observable(undefined);
     self.searchQuery.subscribe(() => { self.performSearch(); });
 
-    self.octoprintFiles = undefined;
+    connLib.selectedPrinter.subscribe(() => { self.processActivePrinter(); });
 
     self.allJobs = new ItemListHelper(
         'worklogHistory',
@@ -128,7 +130,7 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     };
 
     self.showPrintAgain = function canPrintAgain(item) {
-        if (item.printer === self.activePrinter && files.enablePrint()) {
+        if (item.printer === self.activePrinter && filesLib.enablePrint() && self.octoprintFiles) {
             return _.contains(self.octoprintFiles[item.origin], item.path);
         }
 
@@ -140,12 +142,12 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             return;
         }
 
-        if (files.listHelper.isSelected(data) && files.enablePrint(data)) {
+        if (filesLib.listHelper.isSelected(data) && filesLib.enablePrint(data)) {
             // file was already selected, just start the print job
             OctoPrint.job.start();
         } else {
             // select file, start print job (if requested and within dimensions)
-            const print = files.evaluatePrintDimensions(data, true);
+            const print = filesLib.evaluatePrintDimensions(data, true);
 
             OctoPrint.files.select(data.origin, data.path, print);
         }
@@ -186,8 +188,6 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             || fltUser.requestInProgress();
     });
 
-    self.requestInProgress = ko.observable(false);
-
     self.processJobs = function processRequestedJobs(data) {
         self.allJobs.updateItems(data.jobs);
     };
@@ -199,19 +199,17 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             .always(() => { self.requestInProgress(false); });
     };
 
-    self.processActivePrinter = function processRequestedActivePrinter(data) {
-        const { printer } = data;
-        if (printer !== undefined) {
-            self.activePrinter = printer.name;
-        }
+    self.processActivePrinter = function processActivePrinterChange() {
+        profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() })
+        self.activePrinter = profile ? profile.name : undefined;
     };
-
-    self.requestActivePrinter = function requestActivePrinterFromBackend() {
-        self.requestInProgress(true);
-        return api.printer.get('@')
-            .done((response) => { self.processActivePrinter(response); })
-            .always(() => { self.requestInProgress(false); });
-    };
+//~ 
+    //~ self.requestActivePrinter = function requestActivePrinterFromBackend() {
+        //~ self.requestInProgress(true);
+        //~ return api.printer.get('@')
+            //~ .done((response) => { self.processActivePrinter(response); })
+            //~ .always(() => { self.requestInProgress(false); });
+    //~ };
 
     self.updateOctoprintFiles = function updateOctoprintFilesRecursively(entry) {
         if (entry.type === 'folder') {
@@ -226,11 +224,10 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             local: [],
             sdcard: [],
         };
-
         _.each(data.files, (entry) => { self.updateOctoprintFiles(entry); });
     };
 
-    self.requestFiles = function requestOctorintFiles() {
+    self.requestFiles = function requestOctoprintFiles() {
         self.requestInProgress(true);
         return OctoPrint.files.list(true)
             .done((response) => { self.processOctoprintFiles(response); })

@@ -5,9 +5,14 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
     const api = this.core.client;
     const history = this.viewModels.jobs;
 
+    const connLib = this.core.bridge.allViewModels.connectionViewModel;
+
     self.allItems = ko.observableArray([]);
     self.selected = ko.observable();
     self.requestInProgress = ko.observable(false);
+    
+    self.printerChanged = false;
+    connLib.selectedPrinter.subscribe(() => { self.printerChanged = true; });
 
     history.allJobs.addFilter('printer');
 
@@ -20,20 +25,13 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
         let { printers } = data;
         if (printers === undefined) printers = [];
         self.allItems(printers);
-    };
+        
+        if (self.printerChanged) {
+            profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() })
+            self.selected(profile ? profile.name : undefined);
 
-    self.processActivePrinter = function processRequestedActivePrinter(data) {
-        const { printer } = data;
-        if (printer !== undefined) {
-            self.selected(printer.name);
+            self.printerChanged = false;
         }
-    };
-
-    self.requestActivePrinter = function requestActivePrinterFromBackend() {
-        self.requestInProgress(true);
-        return api.printer.get('@')
-            .done((response) => { self.processActivePrinter(response); })
-            .always(() => { self.requestInProgress(false); });
     };
 
     self.requestPrinters = function requestAllPrintersFromBackend(force) {

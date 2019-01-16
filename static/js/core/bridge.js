@@ -11,6 +11,7 @@ WorkLog.prototype.core.bridge = function pluginBridge() {
             'printerStateViewModel',
             'loginStateViewModel',
             'filesViewModel',
+            'connectionViewModel',
         ],
 
         BINDINGS: [

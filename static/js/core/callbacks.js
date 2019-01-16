@@ -2,6 +2,7 @@
 
 WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
     const self = this;
+    const usersLib = this.core.bridge.allViewModels.loginStateViewModel;
 
     // self.onStartup = function onStartupCallback() {
         // self.viewModels.warning.replaceFilamentView();
@@ -17,10 +18,10 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
     self.onStartupComplete = function onStartupCompleteCallback() {
         const requests = [
             self.viewModels.userFilter.requestUsers,
-            self.viewModels.userFilter.requestActiveUser,
             self.viewModels.printerFilter.requestPrinters,
-            self.viewModels.printerFilter.requestActivePrinter,
-            self.viewModels.jobs.requestActivePrinter,
+            //~ self.viewModels.printerFilter.requestActivePrinter,
+            //~ self.viewModels.jobs.requestActivePrinter,
+            self.viewModels.jobs.requestFiles,
             self.viewModels.jobs.requestJobs,
         ];
 
@@ -37,26 +38,30 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
         if (messageType === 'data_changed') {
             self.viewModels.userFilter.requestUsers();
             self.viewModels.printerFilter.requestPrinters();
-            self.viewModels.jobs.requestActivePrinter();
+            //~ self.viewModels.jobs.requestActivePrinter();
             self.viewModels.jobs.requestFiles();
             self.viewModels.jobs.requestJobs();
         }
     };
 
-    self.onEventFileRemoved = function onFileRemoved(payload) {
-        self.onFilesUpdated(payload);
+    self.onEventPrintStarted = function onPrintStarted(data) {
+        console.log(': ' + data.path + ', ' + usersLib.currentUser().name);
     };
 
-    self.onEventFileAdded = function onFileAdded(payload) {
-        self.onFilesUpdated(payload);
+    self.onEventFileRemoved = function onFileRemoved(data) {
+        self.onFilesUpdated(data);
     };
 
-    self.onEventFolderRemoved = function onFolderRemoved(payload) {
-        self.onFilesUpdated(payload);
+    self.onEventFileAdded = function onFileAdded(data) {
+        self.onFilesUpdated(data);
     };
 
-    self.onFilesUpdated = function onFilesUpdatedHelper(payload) {
-        const { type } = payload;
+    self.onEventFolderRemoved = function onFolderRemoved(data) {
+        self.onFilesUpdated(data);
+    };
+
+    self.onFilesUpdated = function onFilesUpdatedHelper(data) {
+        const { type } = data;
         if (!(type === undefined || _.contains(type, 'machinecode'))) return;
 
         const requests = [

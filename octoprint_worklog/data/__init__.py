@@ -7,6 +7,7 @@ __copyright__ = "Copyright (C) 2017 Sven Lohrmann - Released under terms of the 
 
 import os
 import sqlite3
+import octoprint.printer.profile
 
 class WorkLog(object):
 
@@ -18,7 +19,6 @@ class WorkLog(object):
     
     def __init__(self, config):
         self._db_path = config["path"]
-        self._client_id = config["clientId"]
         self._logger = config["logger"]
  
     def initialize(self):
@@ -28,7 +28,6 @@ class WorkLog(object):
         create_sql = """\
         CREATE TABLE IF NOT EXISTS jobs (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_id VARCHAR(36) NOT NULL,
             printer   TEXT,
             user      TEXT,
             file      TEXT NOT NULL,
@@ -57,13 +56,6 @@ class WorkLog(object):
             PRIMARY KEY (name)
         );
         
-        CREATE TABLE IF NOT EXISTS actives (
-            client_id VARCHAR(36) NOT NULL, 
-            table_name VARCHAR(255) NOT NULL, 
-            id VARCHAR(255) NOT NULL, 
-            PRIMARY KEY (client_id, table_name)
-        );
-        
         CREATE TABLE IF NOT EXISTS version (
             id INTEGER NOT NULL
         );
@@ -71,65 +63,21 @@ class WorkLog(object):
         CREATE TRIGGER IF NOT EXISTS jobs_on_insert AFTER INSERT on "jobs"
             FOR EACH ROW BEGIN
                 REPLACE INTO modifications (table_name, action) VALUES ('jobs','INSERT');
-                REPLACE INTO actives (client_id, table_name, id) VALUES (new.client_id, 'jobs', new.id);
                 INSERT OR IGNORE INTO users (name) VALUES (new.user);
-                REPLACE INTO actives (client_id, table_name, id) VALUES (new.client_id, 'users', new.user);
                 INSERT OR IGNORE INTO printers (name) VALUES (new.printer);
-                REPLACE INTO actives (client_id, table_name, id) VALUES (new.client_id, 'printers', new.printer);
             END;
             
         CREATE TRIGGER IF NOT EXISTS jobs_on_delete AFTER DELETE on "jobs"
             FOR EACH ROW BEGIN
-                REPLACE INTO modifications (table_name, action) VALUES ('jobs','DELETE');
-                DELETE FROM actives WHERE client_id=old.client_id;
+                INSERT OR REPLACE INTO modifications (table_name, action) VALUES ('jobs','DELETE');
             END;
 
         CREATE TRIGGER IF NOT EXISTS jobs_on_update AFTER UPDATE on "jobs"
             FOR EACH ROW BEGIN
-                REPLACE INTO modifications (table_name, action) VALUES ('jobs','UPDATE');
-                DELETE FROM actives WHERE client_id=new.client_id AND new.status>=0;
+                INSERT OR REPLACE INTO modifications (table_name, action) VALUES ('jobs','UPDATE');
                 INSERT OR IGNORE INTO users (name) VALUES (new.user);
-                REPLACE INTO actives (client_id, table_name, id) VALUES (new.client_id, 'users', new.user);
                 INSERT OR IGNORE INTO printers (name) VALUES (new.printer);
-                REPLACE INTO actives (client_id, table_name, id) VALUES (new.client_id, 'printers', new.printer);
             END;
-        
-        CREATE TRIGGER IF NOT EXISTS actives_on_insert AFTER INSERT on "actives"
-            FOR EACH ROW BEGIN
-                REPLACE INTO modifications (table_name, action) VALUES ('actives','INSERT');
-            END;
-            
-        CREATE TRIGGER IF NOT EXISTS actives_on_delete AFTER DELETE on "actives"
-            FOR EACH ROW BEGIN
-                REPLACE INTO modifications (table_name, action) VALUES ('actives','DELETE');
-            END;
-
-        CREATE TRIGGER IF NOT EXISTS actives_on_update AFTER UPDATE on "actives"
-            FOR EACH ROW BEGIN
-                REPLACE INTO modifications (table_name, action) VALUES ('actives','UPDATE');
-            END;
-
-        CREATE TRIGGER IF NOT EXISTS actives_on_insert_user AFTER INSERT on "actives"
-            FOR EACH ROW WHEN new.table_name='users' BEGIN
-                INSERT OR IGNORE INTO users (name) VALUES (new.id);
-            END;
-        
-        CREATE TRIGGER IF NOT EXISTS actives_on_insert_printer AFTER INSERT on "actives"
-            FOR EACH ROW WHEN new.table_name='printers' BEGIN
-                INSERT OR IGNORE INTO printers (name) VALUES (new.id);
-            END;
-        
-        CREATE TRIGGER IF NOT EXISTS actives_on_update_user AFTER UPDATE on "actives"
-            FOR EACH ROW WHEN new.table_name='users' BEGIN
-                INSERT OR IGNORE INTO users (name) VALUES (new.id);
-            END;
-        
-        CREATE TRIGGER IF NOT EXISTS actives_on_update_printer AFTER UPDATE on "actives"
-            FOR EACH ROW WHEN new.table_name='printers' BEGIN
-                INSERT OR IGNORE INTO printers (name) VALUES (new.id);
-            END;
-            
-        CREATE INDEX IF NOT EXISTS idx_client_id ON jobs (client_id);
         
         CREATE INDEX IF NOT EXISTS idx_printer ON jobs (printer);
         
@@ -141,15 +89,6 @@ class WorkLog(object):
 
         """
         
-        #~ CREATE VIEW IF NOT EXISTS v_jobs
-        #~ AS
-        #~ SELECT
-            #~ *,
-            #~ datetime(start, 'unixepoch', 'localtime') as f_start,
-            #~ datetime(end, 'unixepoch', 'localtime') as f_end,
-            #~ (cast(end AS INT) - cast(start as INT)) AS time
-        #~ FROM jobs;
-    
         cur.executescript(create_sql)
         
         # Check database version
@@ -175,7 +114,7 @@ class WorkLog(object):
         row = cur.fetchone()
         conn.close()
         #~ self._logger.info("changed_at: %s" % row[0])
-        return row[0]
+        return 0 if row is None else row[0]
         
     def get_jobs_lastmodified(self):
         conn = sqlite3.connect(self._db_path)
@@ -186,19 +125,6 @@ class WorkLog(object):
         #~ self._logger.info("jobs changed_at: %s" % row[0])
         return row[0]
         
-    def get_actives_lastmodified(self):
-        conn = sqlite3.connect(self._db_path)
-        cur  = conn.cursor()
-        cur.execute("SELECT cast(strftime('%s', changed_at) as real) FROM modifications  WHERE table_name='actives'LIMIT 1")
-        row = cur.fetchone()
-        conn.close()
-        #~ self._logger.info("actives changed_at: %s" % row[0])
-        return row[0]
-
-        #~ with self.lock, self.conn.begin():
-            #~ stmt = select([self.modifications.c.changed_at]).where(self.modifications.c.table_name == "jobs")
-            #~ return self.conn.execute(stmt).scalar()
-
     def get_all_jobs(self):
         #~ self._logger.info("get_all_jobs")
         conn = sqlite3.connect(self._db_path)
@@ -228,43 +154,24 @@ class WorkLog(object):
                 #~ .order_by(self.jobs.c.material, self.jobs.c.vendor)
             #~ result = self.conn.execute(stmt)
         #~ return self._result_to_dict(result, one=True)
-        
-    def get_active_job(self):
+
+    
+    def get_active_job(self, printer):
         #~ self._logger.info("get_active_job")
         conn = sqlite3.connect(self._db_path)
         conn.row_factory = sqlite3.Row
         cur  = conn.cursor()
-        sql = """\
-        SELECT jobs.* 
-        FROM jobs, actives
-        WHERE jobs.id=actives.id 
-            AND actives.table_name='jobs'
-            AND actives.client_id=:clientId
-            """
-        cur.execute(sql, (self._client_id,))
+        cur.execute("SELECT * FROM jobs WHERE printer=? AND status=?", (printer, self.STATUS_UNDEFINED))
         result = self._result_to_dict(cur, True)
-        
-        # may be request from other client
-        if result == None:
-            sql = """\
-            SELECT jobs.* 
-            FROM jobs, actives
-            WHERE jobs.printer=actives.id 
-                AND actives.table_name='printers'
-                AND jobs.status=:undefined
-                """
-            cur.execute(sql, (self.STATUS_UNDEFINED,))
-            result = self._result_to_dict(cur, True)
-
         conn.close()
         return result
 
-    def create_job(self, data):
-        #~ self._logger.info("create_job")
+    def start_job(self, data):
+        #~ self._logger.info("start_job")
         conn = sqlite3.connect(self._db_path)
         sql = """\
-        INSERT INTO jobs (client_id, printer, user, file, origin, path, start) 
-        VALUES (:client_id, :printer, :user, :file, :origin, :path, :start)
+        INSERT INTO jobs (printer, user, file, origin, path, start) 
+        VALUES (:printer, :user, :file, :origin, :path, :start)
         """
         cur = conn.cursor()
         cur.execute(sql, data)
@@ -280,8 +187,8 @@ class WorkLog(object):
         #~ data["id"] = result.lastrowid
         #~ return data
 
-    def update_job(self, identifier, data):
-        #~ self._logger.info("create_job")
+    def finish_job(self, identifier, data):
+        #~ self._logger.info("finish_job")
         conn = sqlite3.connect(self._db_path)
         data["id"] = identifier
         sql = """\
@@ -319,24 +226,12 @@ class WorkLog(object):
         conn = sqlite3.connect(self._db_path)
         conn.row_factory = sqlite3.Row
         cur  = conn.cursor()
-        if name == "@":
-            sql = """\
-            SELECT users.* 
-            FROM users, actives
-            WHERE users.name=actives.id 
-                AND actives.table_name='users'
-                AND actives.client_id=:clientId
-                """
-            cur.execute(sql, (self._client_id,))
-            result = self._result_to_dict(cur, True)
-        else:
-            cur.execute("SELECT * FROM users WHERE name=:identifier", (name,))
-            result = self._result_to_dict(cur)
-            
+        cur.execute("SELECT * FROM users WHERE name=?", (name,))
+        result = self._result_to_dict(cur)
         conn.close()
         #~ self._logger.info("get_all_users: %s", (result,))
         return result
-
+        
     def get_all_printers(self):
         #~ self._logger.info("get_all_printers")
         conn = sqlite3.connect(self._db_path)
@@ -354,89 +249,14 @@ class WorkLog(object):
         conn.row_factory = sqlite3.Row
         cur  = conn.cursor()
         result = None
-        if name == "@":
-            sql = """\
-            SELECT printers.* 
-            FROM printers, actives
-            WHERE printers.name=actives.id 
-                AND actives.table_name='printers'
-                AND actives.client_id=:clientId
-                """
-            cur.execute(sql, (self._client_id,))
-            result = self._result_to_dict(cur, True)
-        else:
-            cur.execute("SELECT * FROM printers WHERE name=:identifier", (name,))
-            result = self._result_to_dict(cur)
-            
+        cur.execute("SELECT * FROM printers WHERE name=?", (name,))
+        result = self._result_to_dict(cur)
         conn.close()
         #~ self._logger.info("get_all_printers: %s", (result,))
         return result
-
-    def update_active(self, data):
-        #~ self._logger.info("update_active")
-        data["clientId"] = self._client_id
-        conn = sqlite3.connect(self._db_path)
-        sql = """\
-        INSERT OR REPLACE INTO actives (client_id, table_name, id) 
-        VALUES (:clientId, :table_name, :id)
-        """
-        cur = conn.cursor()
-        cur.execute(sql, data)
-        conn.commit()
-        conn.close()
-        return data
-        
-    def get_active_id(self, tableName):
-        #~ self._logger.info("get_active_id")
-        data = {
-            "clientId" : self._client_id,
-            "tableName": tableName
-            }
-        conn = sqlite3.connect(self._db_path)
-        cur = conn.cursor()
-        cur.execute("SELECT id WHERE client_id=:clientId AND table_name=:tableName", data)
-        result = self._result_to_dict(cur)
-        conn.close()
-        return result
-        
-    def remove_active(self, data):
-        #~ self._logger.info("remove_active")
-        data["clientId"] = self._client_id
-        conn = sqlite3.connect(self._db_path)
-        sql = """\
-        DELETE FROM actives
-        WHERE (client_id=:clientId AND table_name=:table_name)
-        """
-        cur = conn.cursor()
-        rows = cur.execute(sql, data).rowcount
-        conn.commit()
-        conn.close()
-        return rows
         
     # helper
 
-    def update_active_user(self, user):
-        if user is None: 
-            self.remove_active_user()
-            return None
-        data = {"table_name": "users", "id": user}
-        return self.update_active(data)
-                
-    def update_active_printer(self, printer):
-        if printer is None:
-            self.remove_active_printer()
-            return None
-        data = {"table_name": "printers", "id": printer}
-        return self.update_active(data)
-        
-    def remove_active_user(self):
-        data = {"table_name": "users"}
-        return self.remove_active(data)
-               
-    def remove_active_printer(self):
-        data = {"table_name": "printers"}
-        return self.remove_active(data)
-               
     def _result_to_dict(self, result, one=False):
         if one:
             row = result.fetchone()

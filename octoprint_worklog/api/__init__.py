@@ -6,8 +6,6 @@ __license__ = "GNU Affero General Public License http://www.gnu.org/licenses/agp
 __copyright__ = "Copyright (C) 2017 Sven Lohrmann - Released under terms of the AGPLv3 License"
 
 import os
-#~ import tempfile
-#~ import shutil
 from datetime import datetime
 
 from flask import jsonify, request, make_response, Response
@@ -64,32 +62,32 @@ class WorkLogApi(octoprint.plugin.BlueprintPlugin):
                                .format(id=str(identifier), message=str(e)))
             return make_response("Failed to fetch job, see the log for more details", 500)
 
-    @octoprint.plugin.BlueprintPlugin.route("/jobs", methods=["POST"])
-    @restricted_access
-    def create_job(self):
-        if "application/json" not in request.headers["Content-Type"]:
-            return make_response("Expected content-type JSON", 400)
-
-        try:
-            json_data = request.json
-        except BadRequest:
-            return make_response("Malformed JSON body in request", 400)
-
-        if "job" not in json_data:
-            return make_response("No job included in request", 400)
-
-        new_job = json_data["job"]
-
-        for key in ["printer", "user", "file", "start"]:
-            if key not in new_job:
-                return make_response("Job does not contain mandatory '{}' field".format(key), 400)
-
-        try:
-            saved_job = self.work_log.create_job(new_job)
-            return jsonify(dict(job=saved_job))
-        except Exception as e:
-            self._logger.error("Failed to create job: {message}".format(message=str(e)))
-            return make_response("Failed to create job, see the log for more details", 500)
+    #~ @octoprint.plugin.BlueprintPlugin.route("/jobs", methods=["POST"])
+    #~ @restricted_access
+    #~ def start_job(self):
+        #~ if "application/json" not in request.headers["Content-Type"]:
+            #~ return make_response("Expected content-type JSON", 400)
+#~ 
+        #~ try:
+            #~ json_data = request.json
+        #~ except BadRequest:
+            #~ return make_response("Malformed JSON body in request", 400)
+#~ 
+        #~ if "job" not in json_data:
+            #~ return make_response("No job included in request", 400)
+#~ 
+        #~ new_job = json_data["job"]
+#~ 
+        #~ for key in ["printer", "user", "file", "start"]:
+            #~ if key not in new_job:
+                #~ return make_response("Job does not contain mandatory '{}' field".format(key), 400)
+#~ 
+        #~ try:
+            #~ saved_job = self.work_log.start_job(new_job)
+            #~ return jsonify(dict(job=saved_job))
+        #~ except Exception as e:
+            #~ self._logger.error("Failed to create job: {message}".format(message=str(e)))
+            #~ return make_response("Failed to create job, see the log for more details", 500)
 
     @octoprint.plugin.BlueprintPlugin.route("/users", methods=["GET"])
     def get_user_list(self):
