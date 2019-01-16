@@ -1,0 +1,140 @@
+            
+    <!-- filter -->
+    
+    <div id="worklog_history_header" class="" style="">
+        <div class="form-inline">
+            <div class="worklog-filter" title="{{ _('Select user') }}">
+                <label class="control-label">{{ _('User') }}</label>&nbsp;
+                <select class="worklog-filter-select" data-bind="options: viewModels.userFilter.allItems, optionsText: 'name', optionsValue: 'name', optionsCaption: '{{ _('All Users') }}', value: viewModels.userFilter.selected, event: { change: viewModels.userFilter.changed() }"></select>
+            </div>
+            <div class="worklog-filter" title="{{ _('Select printer') }}">
+                <label class="control-label">{{ _('Printer') }}</label>&nbsp;
+                <select class="worklog-filter-select" data-bind="options: viewModels.printerFilter.allItems, optionsText: 'name', optionsValue: 'name', optionsCaption: '{{ _('All Printers') }}', value: viewModels.printerFilter.selected, event: { change: viewModels.printerFilter.changed() }"></select>
+            </div>
+            <div class="worklog-filter" title="{{ _('Select status') }}">
+                <label class="control-label">{{ _('Status') }}</label>&nbsp;
+                <select class="worklog-filter-select" data-bind="options: viewModels.statusFilter.allItems, optionsText: 'name', optionsValue: 'value', optionsCaption: '{{ _('All') }}', value: viewModels.statusFilter.selected, event: { change: viewModels.statusFilter.changed() }"></select>
+            </div>
+            <div class="worklog-filter" title="{{ _('Select period') }}">
+                <label class="control-label">{{ _('Period') }}</label>&nbsp;
+                <select class="worklog-filter-select" data-bind="options: viewModels.periodFilter.allItems, optionsText: 'name', optionsValue: 'value', optionsCaption: '{{ _('All') }}', value: viewModels.periodFilter.selected, event: { change: viewModels.periodFilter.changed() }"></select>
+            </div>
+        </div>
+    </div>
+    <hr style="margin: 10px 0px">
+    
+    <!-- tabs -->
+    
+    <div class="tabbable">
+    <ul class="nav nav-tabs" id="worklog_tabs">
+        <li id="worklog_history_link" class="active">
+            <a href="#worklog_history" data-toggle="tab">{{ _('History') }}&nbsp;<i class="fa fa-spinner" data-bind="visible: viewModels.jobs.inProgress(), css: {'fa-spin': viewModels.jobs.inProgress()}"></i></a>
+            
+        </li>
+        <li id="worklog_summary_link" class="">
+            <a href="#worklog_summary" data-toggle="tab">{{ _('Summary') }} </a>
+        </li>
+    </ul>
+    
+    <!-- tabs content -->
+
+    <div id="worklog_tabs_content" class="tab-content">
+
+        <!-- history tab -->
+
+        <div id="worklog_history" class="tab-pane active">
+            
+            <form class="form-search" style="margin: 4px 0px;" data-bind="submit: viewModels.jobs.performSearch">
+                <input type="text" style="width: 95%;" class="input-block search-query" data-bind="value: viewModels.jobs.searchQuery, valueUpdate: 'input'" placeholder="{{ _('Search...') }}">
+            </form>
+
+            <!-- history table -->
+
+            <table class="table table-striped table-hover table-condensed table-hover">
+                <thead>
+                    <tr>
+                        <th style="width: 50%;">
+                            <span data-bind="click: function() { viewModels.jobs.changeSorting('file'); }">
+                                <a href="#">{{ _('File Name') }} <span data-bind="text: viewModels.jobs.sortSymbol('file')"></span></a>
+                            </span><br>
+                            <span data-bind="click: function() { viewModels.jobs.changeSorting('status'); }">
+                                <a href="#">{{ _('Status') }} <span data-bind="text: viewModels.jobs.sortSymbol('status')"></span></a>
+                            </span>
+                        </th>
+                        <th style="width: 20%;">
+                            <span data-bind="click: function() { viewModels.jobs.changeSorting('printer'); }">
+                                <a href="#">{{ _('Printer') }} <span data-bind="text: viewModels.jobs.sortSymbol('printer')"></span></a>
+                            </span><br>
+                            <span data-bind="click: function() { viewModels.jobs.changeSorting('user'); }">
+                                <a href="#">{{ _('User') }} <span data-bind="text: viewModels.jobs.sortSymbol('user')"></span></a>
+                            </span>
+                        </th>
+                        <th style="width: 25%;">
+                            <span data-bind="click: function() { viewModels.jobs.changeSorting('start'); }">
+                                <a href="#">{{ _('Date &amp; Time') }} <span data-bind="text: viewModels.jobs.sortSymbol('start')"/></a>
+                            </span><br>
+                            <span data-bind="click: function() { viewModels.jobs.changeSorting('time'); }">
+                                <a href="#">{{ _('Duration') }} <span data-bind="text: viewModels.jobs.sortSymbol('time')"/></a>
+                            </span>
+                        </th>
+                        <th style="width: 5%;"/>
+                    </tr>
+                </thead>
+                <tbody data-bind="foreach: viewModels.jobs.allJobs.paginatedItems">
+                    <tr>
+                        <td>
+                            <span data-bind="text: file, attr: { title: origin + ': ' + path }"></span>
+                            <br>
+                            <span data-bind="text: $root.viewModels.jobs.jobStatusText(status), style: { color: $root.viewModels.jobs.jobStatusColor(status) }"></span>
+                            <span style="font-style: italic; color: gray;" data-bind="text: $root.viewModels.jobs.jobNotes(notes)"></span>
+                        </td>
+                        <td style="white-space: nowrap">
+                            <span data-bind="text: printer"></span>
+                            <br>
+                            <span data-bind="text: user"></span>
+                        </td>
+                        <td>
+                            <span data-bind="text: formatDate(start)"></span>
+                            <br>
+                            <span data-bind="text: formatDuration(end - start)"></span>
+                        </td>
+                        <td>
+                            <div class="btn btn-mini" data-bind="click: function() { $root.viewModels.jobs.printAgain($data); }, visible: $root.viewModels.jobs.showPrintAgain($data)" title="{{ _('Print again') }}"><i class="fa fa-print"></i></div>
+<!--div class="btn btn-mini" data-bind="click: function() { if ($root.enablePrint($data)) { $root.loadFile($data, true); } else { return; } }, css: {disabled: !$root.enablePrint($data)}" title="{{ _('Load and Print') }}"><i class="fa fa-print"></i></div-->
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- pagination -->
+
+            <div class="pagination pagination-mini pagination-centered items-per-page">
+                <span class="pull-left" title="{{ _('Items per page') }}">
+                    <span class="add-on" style="height:19px; padding: 0px 4px;"><i class="icon-list" style="vertical-align:0.3em;font-size:0.95em"></i></span>
+                    <input type="number" min="0" max="99" step="1" class="input-mini input-nospin" data-bind="value: viewModels.jobs.pageSize">
+                </span>
+                <ul>
+                    <li data-bind="css: {disabled: viewModels.jobs.allJobs.currentPage() === 0}">
+                        <a href="#" data-bind="click: viewModels.jobs.allJobs.prevPage">«</a>
+                    </li>
+                </ul>
+                <ul data-bind="foreach: viewModels.jobs.allJobs.pages">
+                    <li data-bind="css: { active: $data.number === $root.viewModels.jobs.allJobs.currentPage(), disabled: $data.number === -1 }">
+                        <a href="#" data-bind="text: $data.text, click: function() { $root.viewModels.jobs.allJobs.changePage($data.number); }"></a>
+                    </li>
+                </ul>
+                <ul>
+                    <li data-bind="css: {disabled: viewModels.jobs.allJobs.currentPage() === viewModels.jobs.allJobs.lastPage() || viewModels.jobs.allJobs.lastPage() === -1}">
+                        <a href="#" data-bind="click: viewModels.jobs.allJobs.nextPage">»</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- summary tab -->
+
+        <div id="worklog_summary" class="tab-pane">
+        </div>
+
+    </div>
+ </div>
