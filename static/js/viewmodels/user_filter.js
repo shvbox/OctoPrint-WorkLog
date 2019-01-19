@@ -17,8 +17,7 @@ WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
     history.allJobs.addFilter('user');
     
     self.changed = function userFilterChanged() {
-        history.allJobs.refresh();
-        history.allJobs.currentPage(0);
+        history.onFilterChanged();
     };
 
     self.processUsers = function processRequestedUsers(data) {

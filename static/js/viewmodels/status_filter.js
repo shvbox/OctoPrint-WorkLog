@@ -12,7 +12,6 @@ WorkLog.prototype.viewModels.statusFilter = function statusFilterViewModel() {
     history.allJobs.addFilter('status');
 
     self.changed = function statusFilterChanged() {
-        history.allJobs.refresh();
-        history.allJobs.currentPage(0);
+        history.onFilterChanged();
     };
 };

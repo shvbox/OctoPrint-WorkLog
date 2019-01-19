@@ -22,6 +22,40 @@ from .util import *
 
 class WorkLogApi(octoprint.plugin.BlueprintPlugin):
 
+    @octoprint.plugin.BlueprintPlugin.route("/totals", methods=["GET"])
+    def get_totals(self):
+        #~ self._logger.info("get_job_totals")
+        force = request.values.get("force", "false") in valid_boolean_trues
+        conditions = {
+            "user": request.values.get("user", None),
+            "printer": request.values.get("printer", None),
+            "status": request.values.get("status", None),
+            "begin": request.values.get("begin", None),
+            "end": request.values.get("end", None),
+            }
+
+        self._logger.info(u"get_totals: %s" % request.url)
+        
+        try:
+            lm = self.work_log.get_jobs_lastmodified()
+        except Exception as e:
+            lm = None
+            self._logger.error("Failed to fetch jobs lastmodified timestamp: {message}".format(message=str(e)))
+
+        etag = entity_tag(lm)
+
+        if not force and check_lastmodified(lm) and check_etag(etag):
+            return make_response("Not Modified", 304)
+
+        try:
+            self._logger.info(u"get_totals: %s" % conditions)
+            totals = self.work_log.get_job_totals(conditions)
+            response = jsonify(dict(totals=totals))
+            return add_revalidation_header_with_no_max_age(response, lm, etag)
+        except Exception as e:
+            self._logger.error("Failed to fetch totals: {message}".format(message=str(e)))
+            return make_response("Failed to fetch totals, see the log for more details", 500)
+
     @octoprint.plugin.BlueprintPlugin.route("/jobs", methods=["GET"])
     def get_job_list(self):
         #~ self._logger.info("get_job_list")
@@ -95,7 +129,7 @@ class WorkLogApi(octoprint.plugin.BlueprintPlugin):
         force = request.values.get("force", "false") in valid_boolean_trues
 
         try:
-            lm = self.work_log.get_lastmodified()
+            lm = self.work_log.get_users_lastmodified()
         except Exception as e:
             lm = None
             self._logger.error("Failed to fetch lastmodified timestamp: {message}".format(message=str(e)))
@@ -135,7 +169,7 @@ class WorkLogApi(octoprint.plugin.BlueprintPlugin):
         force = request.values.get("force", "false") in valid_boolean_trues
 
         try:
-            lm = self.work_log.get_lastmodified()
+            lm = self.work_log.get_printers_lastmodified()
         except Exception as e:
             lm = None
             self._logger.error("Failed to fetch lastmodified timestamp: {message}".format(message=str(e)))

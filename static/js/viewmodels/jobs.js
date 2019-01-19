@@ -15,8 +15,12 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     self.activePrinter = undefined;
     self.octoprintFiles = undefined;
 
+    self.totalQuantity = ko.observable(undefined);
+    self.totalDuration = ko.observable(undefined);
+    
     self.requestInProgress = ko.observable(false);
     self.searchQuery = ko.observable(undefined);
+
     self.searchQuery.subscribe(() => { self.performSearch(); });
 
     connLib.selectedPrinter.subscribe(() => { self.processActivePrinter(); });
@@ -31,28 +35,28 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
                 return Utils.sortStrColDesc('file', a, b);
             },
             userAsc(a, b) {
-                return Utils.sortStrColAsc('user', a, b);
+                return Utils.sortStrColAsc('user_name', a, b);
             },
             userDesc(a, b) {
-                return Utils.sortStrColDesc('user', a, b);
+                return Utils.sortStrColDesc('user_name', a, b);
             },
             printerAsc(a, b) {
-                return Utils.sortStrColAsc('printer', a, b);
+                return Utils.sortStrColAsc('printer_name', a, b);
             },
             printerDesc(a, b) {
-                return Utils.sortStrColDesc('printer', a, b);
+                return Utils.sortStrColDesc('printer_name', a, b);
             },
             startAsc(a, b) {
-                return Utils.sortIntColAsc('start', a, b);
+                return Utils.sortIntColAsc('start_time', a, b);
             },
             startDesc(a, b) {
-                return Utils.sortIntColDesc('start', a, b);
+                return Utils.sortIntColDesc('start_time', a, b);
             },
-            timeAsc(a, b) {
-                return Utils.sortIntColAsc('time', a, b);
+            durationAsc(a, b) {
+                return Utils.sortIntColAsc('duration', a, b);
             },
-            timeDesc(a, b) {
-                return Utils.sortIntColDesc('time', a, b);
+            durationDesc(a, b) {
+                return Utils.sortIntColDesc('duration', a, b);
             },
             statusAsc(a, b) {
                 return Utils.sortIntColAsc('status', a, b);
@@ -63,16 +67,16 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         },
         {
             user(data) {
-                return fltUser.selected() === undefined || data.user === fltUser.selected();
+                return fltUser.selected() === undefined || data.user_name === fltUser.selected();
             },
             printer(data) {
-                return fltPrinter.selected() === undefined || data.printer === fltPrinter.selected();
+                return fltPrinter.selected() === undefined || data.printer_name === fltPrinter.selected();
             },
             status(data) {
                 return fltStatus.selected() === undefined || data.status === fltStatus.selected();
             },
             period(data) {
-                return fltPeriod.selected() === undefined || fltPeriod.isValid(data.start);
+                return fltPeriod.selected() === undefined || fltPeriod.isValid(data.start_time);
             },
         },
         'startAsc', [], [], 10,
@@ -130,8 +134,8 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     };
 
     self.showPrintAgain = function canPrintAgain(item) {
-        if (item.printer === self.activePrinter && filesLib.enablePrint() && self.octoprintFiles) {
-            return _.contains(self.octoprintFiles[item.origin], item.path);
+        if (item.printer_name === self.activePrinter && filesLib.enablePrint() && self.octoprintFiles) {
+            return _.contains(self.octoprintFiles[item.origin], item.file_path);
         }
 
         return false;
@@ -149,7 +153,7 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             // select file, start print job (if requested and within dimensions)
             const print = filesLib.evaluatePrintDimensions(data, true);
 
-            OctoPrint.files.select(data.origin, data.path, print);
+            OctoPrint.files.select(data.origin, data.file_path, print);
         }
     };
 
@@ -167,14 +171,10 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         if (query !== undefined && query !== '') {
             query = query.toLocaleLowerCase();
 
-            const recursiveSearch = function (entry) { // eslint-disable-line func-names
-                if (entry === undefined) {
-                    return false;
-                }
+            self.allJobs.changeSearchFunction(function (entry) { // eslint-disable-line func-names, prefer-arrow-callback
                 return entry.file.toLocaleLowerCase().indexOf(query) > -1;
-            };
+            });
 
-            self.allJobs.changeSearchFunction(recursiveSearch);
         } else {
             self.allJobs.resetSearch();
         }
@@ -188,6 +188,50 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             || fltUser.requestInProgress();
     });
 
+    //~ self.allJobs.items.subscribe(function(newValue) {
+        //~ var totalTime = 0;
+        //~ var totalUsage = {
+            //~ length: 0,
+            //~ volume: 0
+        //~ };
+        //~ var averageUsage = {
+            //~ length: 0,
+            //~ volume: 0
+        //~ };
+//~ 
+        //~ var itemList = newValue;
+        //~ var itemListLength = itemList.length;
+        //~ for (var i = 0; i < itemListLength; i++) {
+            //~ totalTime += itemList[i].printTime();
+//~ 
+            //~ totalUsage.length += itemList[i].filamentLength();
+            //~ totalUsage.volume += itemList[i].filamentVolume();
+        //~ }
+//~ 
+        //~ self.totalTime(formatDuration(totalTime));
+        //~ self.totalUsage(formatFilament(totalUsage));
+//~ 
+        //~ averageUsage.length = totalUsage.length / itemListLength;
+        //~ averageUsage.volume = totalUsage.volume / itemListLength;
+//~ 
+        //~ self.averageTime(formatDuration(totalTime / itemListLength));
+        //~ self.averageUsage(formatFilament(averageUsage));
+    //~ });
+//~ 
+    //~ self.updateTotals = function updateHistoryTotals() {
+        //~ if (self.allJobs.searchFunction) {
+            //~ self.calculateTotals();
+        //~ } else {
+            //~ self.requestTotals();
+        //~ }
+    //~ }
+
+    self.onFilterChanged = function processFilterChanger() {
+        self.allJobs.refresh();
+        self.allJobs.currentPage(0);
+        self.requestTotals(true);
+    }
+    
     self.processJobs = function processRequestedJobs(data) {
         self.allJobs.updateItems(data.jobs);
     };
@@ -203,13 +247,6 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() })
         self.activePrinter = profile ? profile.name : undefined;
     };
-//~ 
-    //~ self.requestActivePrinter = function requestActivePrinterFromBackend() {
-        //~ self.requestInProgress(true);
-        //~ return api.printer.get('@')
-            //~ .done((response) => { self.processActivePrinter(response); })
-            //~ .always(() => { self.requestInProgress(false); });
-    //~ };
 
     self.updateOctoprintFiles = function updateOctoprintFilesRecursively(entry) {
         if (entry.type === 'folder') {
@@ -231,6 +268,30 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         self.requestInProgress(true);
         return OctoPrint.files.list(true)
             .done((response) => { self.processOctoprintFiles(response); })
+            .always(() => { self.requestInProgress(false); });
+    };
+
+    self.processTotals = function processRequestedTotals(data) {
+        const { totals } = data;
+        //~ Utils.printJSON(totals);
+        if (totals !== undefined) {;
+            self.totalQuantity(totals.total_quantity);
+            self.totalDuration(formatDuration(Utils.validInt(totals.total_duration)));
+        }
+    };
+
+    self.requestTotals = function requestTotalsFromBackend(force) {
+        self.requestInProgress(true);
+        const filters = {
+            user: fltUser.selected(),
+            printer: fltPrinter.selected(),
+            status: fltStatus.selected(),
+            begin: fltPeriod.begin,
+            end: fltPeriod.end,
+        }
+            
+        return api.totals.get(force, filters)
+            .done((response) => { self.processTotals(response); })
             .always(() => { self.requestInProgress(false); });
     };
 };

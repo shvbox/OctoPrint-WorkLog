@@ -60,17 +60,17 @@ class WorkLogPlugin(WorkLogApi,
         printerState = self._printer.get_state_id();
         self._logger.info("on_after_startup: " + printerState)
         if (printerState != "PRINTING" and printerState != "PAUSED"):
-            data = self.work_log.get_active_job(self.get_current_printer())
+            data = self.work_log.get_active_job()
             if data != None:
                 data["end"] = -1
                 data["status"] = self.work_log.STATUS_FAIL
-                data["notes"] = r"unexpected server shutdown"
+                data["notes"] = r"unexpected error"
                 self.work_log.finish_job(data.get("id"), data)
 
     #~ ##~~ ShutdownPlugin mixin
     def on_shutdown(self):
         self._logger.info("on_shutdown")
-        data = self.work_log.get_active_job(self.get_current_printer())
+        data = self.work_log.get_active_job()
         if data != None:
             data["end"] = time.time()
             data["status"] = self.work_log.STATUS_FAIL
@@ -131,7 +131,6 @@ class WorkLogPlugin(WorkLogApi,
             #~ self._logger.info("%s" % (settings().get(["folder", "uploads"]),))
                 
             data = {
-                "client_id": self.client_id,
                 "printer": self.get_current_printer(),
                 "user": self._printer.get_current_job()["user"],
                 "file": payload["name"],
@@ -171,13 +170,13 @@ class WorkLogPlugin(WorkLogApi,
     
     #~~ WorkLog Plugin
     def update_current_job(self, data):
-        currentJob = self.work_log.get_active_job(self.get_current_printer())
+        currentJob = self.work_log.get_active_job()
         if currentJob != None:
             self.work_log.finish_job(currentJob.get("id"), data)
             self.send_client_message("data_changed", data=dict(table="jobs", action="update"))
             
         else:
-            self._logger.error("Can not retrieve id for current job")
+            self._logger.error("Can not retrieve id for current job. ID = %s" % self.client_id())
     
     def send_client_message(self, message_type, data=None):
         self._plugin_manager.send_plugin_message(self._identifier, dict(type=message_type, data=data))

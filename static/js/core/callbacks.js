@@ -19,10 +19,9 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
         const requests = [
             self.viewModels.userFilter.requestUsers,
             self.viewModels.printerFilter.requestPrinters,
-            //~ self.viewModels.printerFilter.requestActivePrinter,
-            //~ self.viewModels.jobs.requestActivePrinter,
             self.viewModels.jobs.requestFiles,
             self.viewModels.jobs.requestJobs,
+            self.viewModels.jobs.requestTotals,
         ];
 
         // We chain them because, e.g. selections depends on spools
@@ -38,14 +37,9 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
         if (messageType === 'data_changed') {
             self.viewModels.userFilter.requestUsers();
             self.viewModels.printerFilter.requestPrinters();
-            //~ self.viewModels.jobs.requestActivePrinter();
-            self.viewModels.jobs.requestFiles();
             self.viewModels.jobs.requestJobs();
+            self.viewModels.jobs.requestTotals();
         }
-    };
-
-    self.onEventPrintStarted = function onPrintStarted(data) {
-        console.log(': ' + data.path + ', ' + usersLib.currentUser().name);
     };
 
     self.onEventFileRemoved = function onFileRemoved(data) {

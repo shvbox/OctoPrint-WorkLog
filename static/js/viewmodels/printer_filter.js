@@ -17,8 +17,7 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
     history.allJobs.addFilter('printer');
 
     self.changed = function printerFilterChanged() {
-        history.allJobs.refresh();
-        history.allJobs.currentPage(0);
+        history.onFilterChanged();
     };
 
     self.processPrinters = function processRequestedPrinters(data) {

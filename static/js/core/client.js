@@ -20,6 +20,10 @@ WorkLog.prototype.core.client = function apiClient() {
         return (printer === undefined) ? url : `${url}/${printer}`;
     };
 
+    const totalsUrl = function apiTotalsNamespace() {
+        return `${pluginUrl}/totals`;
+    }
+
     self.job = {
         list(force = false, opts) {
             const query = force ? { force } : {};
@@ -67,6 +71,21 @@ WorkLog.prototype.core.client = function apiClient() {
         },
     };
 
+    self.totals = {
+        get(force = false, filters = undefined, opts) {
+            const query = force ? { force } : {};
+            if (filters) {
+                const { user, printer, status, begin, end } = filters;
+                if (user) { query['user'] = user; }
+                if (printer) { query['printer'] = printer; }
+                if (status !== undefined) { query['status'] = status; }
+                if (begin > 0) { query['begin'] = begin; }
+                if (end > 0) { query['end'] = end; }
+            }
+            return OctoPrint.getWithQuery(totalsUrl(), query, opts);
+        },
+    };
+    
     self.database = {
         test(config, opts) {
             const url = `${pluginUrl}/database/test`;
