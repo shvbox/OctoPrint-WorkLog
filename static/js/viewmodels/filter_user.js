@@ -3,21 +3,18 @@
 WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
     const self = this.viewModels.userFilter;
     const api = this.core.client;
-    const history = this.viewModels.jobs;
     
     const loginLib = this.core.bridge.allViewModels.loginStateViewModel;
-    
+
     self.allItems = ko.observableArray([]);
-    self.selected = ko.observable();
+    self.selected = ko.observable(undefined);
     self.requestInProgress = ko.observable(false);
-    
+
     self.userChanged = false;
     loginLib.currentUser.subscribe(() => { self.userChanged = true; });
 
-    history.allJobs.addFilter('user');
-    
-    self.changed = function userFilterChanged() {
-        history.onFilterChanged();
+    self.test = function testDataValue(value) {
+        return self.selected() === undefined || value === self.selected();
     };
 
     self.processUsers = function processRequestedUsers(data) {

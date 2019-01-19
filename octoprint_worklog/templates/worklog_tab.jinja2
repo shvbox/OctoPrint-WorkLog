@@ -5,19 +5,19 @@
         <div class="form-inline">
             <div class="worklog-filter" title="{{ _('Select user') }}">
                 <label class="control-label">{{ _('User') }}</label>&nbsp;
-                <select class="worklog-filter-select" data-bind="options: viewModels.userFilter.allItems, optionsText: 'name', optionsValue: 'name', optionsCaption: '{{ _('All Users') }}', value: viewModels.userFilter.selected, event: { change: viewModels.userFilter.changed() }"></select>
+                <select class="worklog-filter-select" data-bind="options: viewModels.userFilter.allItems, optionsText: 'name', optionsValue: 'name', optionsCaption: '{{ _('All Users') }}', value: viewModels.userFilter.selected"></select>
             </div>
             <div class="worklog-filter" title="{{ _('Select printer') }}">
                 <label class="control-label">{{ _('Printer') }}</label>&nbsp;
-                <select class="worklog-filter-select" data-bind="options: viewModels.printerFilter.allItems, optionsText: 'name', optionsValue: 'name', optionsCaption: '{{ _('All Printers') }}', value: viewModels.printerFilter.selected, event: { change: viewModels.printerFilter.changed() }"></select>
+                <select class="worklog-filter-select" data-bind="options: viewModels.printerFilter.allItems, optionsText: 'name', optionsValue: 'name', optionsCaption: '{{ _('All Printers') }}', value: viewModels.printerFilter.selected"></select>
             </div>
             <div class="worklog-filter" title="{{ _('Select status') }}">
                 <label class="control-label">{{ _('Status') }}</label>&nbsp;
-                <select class="worklog-filter-select" data-bind="options: viewModels.statusFilter.allItems, optionsText: 'name', optionsValue: 'value', optionsCaption: '{{ _('All') }}', value: viewModels.statusFilter.selected, event: { change: viewModels.statusFilter.changed() }"></select>
+                <select class="worklog-filter-select" data-bind="options: viewModels.statusFilter.allItems, optionsText: 'name', optionsValue: 'value', optionsCaption: '{{ _('All') }}', value: viewModels.statusFilter.selected"></select>
             </div>
             <div class="worklog-filter" title="{{ _('Select period') }}">
                 <label class="control-label">{{ _('Period') }}</label>&nbsp;
-                <select class="worklog-filter-select" data-bind="options: viewModels.periodFilter.allItems, optionsText: 'name', optionsValue: 'value', optionsCaption: '{{ _('All') }}', value: viewModels.periodFilter.selected, event: { change: viewModels.periodFilter.changed() }"></select>
+                <select class="worklog-filter-select" data-bind="options: viewModels.periodFilter.allItems, optionsText: 'name', optionsValue: 'value', optionsCaption: '{{ _('All') }}', value: viewModels.periodFilter.selected"></select>
             </div>
         </div>
     </div>

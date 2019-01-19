@@ -2,7 +2,6 @@
 
 WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
     const self = this.viewModels.periodFilter;
-    const history = this.viewModels.jobs;
 
     self.allItems = ko.observableArray([
         { name: gettext('Day'), value: 0 },
@@ -14,8 +13,6 @@ WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
 
     self.begin = -1;
     self.end = -1;
-
-    history.allJobs.addFilter('period');
 
     self.changed = function periodFilterChanged() {
         const now = new Date();
@@ -52,7 +49,8 @@ WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
         history.onFilterChanged();
     };
 
-    self.isValid = function periodCheckCondition(date) {
-        return (self.begin < 0 || (date >= self.begin && date < self.end));
+    self.test = function testDataValue(value) {
+        return self.selected() === undefined
+            || (self.begin < 0 || (value >= self.begin && value < self.end));
     };
 };

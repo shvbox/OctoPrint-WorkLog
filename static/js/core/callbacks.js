@@ -21,7 +21,6 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
             self.viewModels.printerFilter.requestPrinters,
             self.viewModels.jobs.requestFiles,
             self.viewModels.jobs.requestJobs,
-            self.viewModels.jobs.requestTotals,
         ];
 
         // We chain them because, e.g. selections depends on spools
@@ -38,7 +37,6 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
             self.viewModels.userFilter.requestUsers();
             self.viewModels.printerFilter.requestPrinters();
             self.viewModels.jobs.requestJobs();
-            self.viewModels.jobs.requestTotals();
         }
     };
 

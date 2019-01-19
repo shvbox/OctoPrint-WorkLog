@@ -158,7 +158,7 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
     // };
 
     self.onStartupComplete = function onStartupCompleteCallback() {
-        var requests = [self.viewModels.userFilter.requestUsers, self.viewModels.printerFilter.requestPrinters, self.viewModels.jobs.requestFiles, self.viewModels.jobs.requestJobs, self.viewModels.jobs.requestTotals];
+        var requests = [self.viewModels.userFilter.requestUsers, self.viewModels.printerFilter.requestPrinters, self.viewModels.jobs.requestFiles, self.viewModels.jobs.requestJobs];
 
         // We chain them because, e.g. selections depends on spools
         Utils.runRequestChain(requests);
@@ -174,7 +174,6 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
             self.viewModels.userFilter.requestUsers();
             self.viewModels.printerFilter.requestPrinters();
             self.viewModels.jobs.requestJobs();
-            self.viewModels.jobs.requestTotals();
         }
     };
 
@@ -320,6 +319,156 @@ WorkLog.prototype.core.client = function apiClient() {
         }
     };
 };
+/* global WorkLog ko gettext */
+
+WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
+    var self = this.viewModels.periodFilter;
+
+    self.allItems = ko.observableArray([{ name: gettext('Day'), value: 0 }, { name: gettext('Week'), value: 1 }, { name: gettext('Month'), value: 2 }, { name: gettext('Year'), value: 3 }]);
+    self.selected = ko.observable();
+
+    self.begin = -1;
+    self.end = -1;
+
+    self.changed = function periodFilterChanged() {
+        var now = new Date();
+        var y = now.getFullYear();
+        var m = now.getMonth();
+        var d = now.getDate();
+
+        switch (self.selected()) {
+            case 0:
+                self.begin = new Date(y, m, d).getTime() / 1000;
+                self.end = new Date(y, m, d + 1).getTime() / 1000;
+                break;
+            case 1:
+                {
+                    var day = now.getDay();
+                    var dw = d - day - (day === 0 ? 6 : -1);
+                    self.begin = new Date(y, m, dw).getTime() / 1000;
+                    self.end = new Date(y, m, dw + 8).getTime() / 1000;
+                }
+                break;
+            case 2:
+                self.begin = new Date(y, m).getTime() / 1000;
+                self.end = new Date(y, m + 1, 1).getTime() / 1000;
+                break;
+            case 3:
+                self.begin = new Date(y, 0).getTime() / 1000;
+                self.end = new Date(y + 1, 0, 1).getTime() / 1000;
+                break;
+            default:
+                self.begin = -1;
+                self.end = -1;
+        }
+
+        console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
+        history.onFilterChanged();
+    };
+
+    self.test = function testDataValue(value) {
+        return self.selected() === undefined || self.begin < 0 || value >= self.begin && value < self.end;
+    };
+};
+/* global WorkLog ko */
+
+WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
+    var self = this.viewModels.printerFilter;
+    var api = this.core.client;
+
+    var connLib = this.core.bridge.allViewModels.connectionViewModel;
+
+    self.allItems = ko.observableArray([]);
+    self.selected = ko.observable();
+    self.requestInProgress = ko.observable(false);
+
+    self.printerChanged = false;
+    connLib.selectedPrinter.subscribe(function () {
+        self.printerChanged = true;
+    });
+
+    self.test = function testDataValue(value) {
+        return self.selected() === undefined || value === self.selected();
+    };
+
+    self.processPrinters = function processRequestedPrinters(data) {
+        var printers = data.printers;
+
+        if (printers === undefined) printers = [];
+        self.allItems(printers);
+
+        if (self.printerChanged) {
+            profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
+            self.selected(profile ? profile.name : undefined);
+
+            self.printerChanged = false;
+        }
+    };
+
+    self.requestPrinters = function requestAllPrintersFromBackend(force) {
+        self.requestInProgress(true);
+        return api.printer.list(force).done(function (response) {
+            self.processPrinters(response);
+        }).always(function () {
+            self.requestInProgress(false);
+        });
+    };
+};
+/* global WorkLog ko gettext */
+
+WorkLog.prototype.viewModels.statusFilter = function statusFilterViewModel() {
+    var self = this.viewModels.statusFilter;
+
+    self.allItems = ko.observableArray([{ name: gettext('Printed'), value: 1 }, { name: gettext('Failed'), value: 0 }]);
+    self.selected = ko.observable();
+
+    self.test = function testDataValue(value) {
+        return self.selected() === undefined || value === self.selected();
+    };
+};
+/* global WorkLog ko Utils */
+
+WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
+    var self = this.viewModels.userFilter;
+    var api = this.core.client;
+
+    var loginLib = this.core.bridge.allViewModels.loginStateViewModel;
+
+    self.allItems = ko.observableArray([]);
+    self.selected = ko.observable(undefined);
+    self.requestInProgress = ko.observable(false);
+
+    self.userChanged = false;
+    loginLib.currentUser.subscribe(function () {
+        self.userChanged = true;
+    });
+
+    self.test = function testDataValue(value) {
+        return self.selected() === undefined || value === self.selected();
+    };
+
+    self.processUsers = function processRequestedUsers(data) {
+        var users = data.users;
+
+        if (users === undefined) users = [];
+        self.allItems(users);
+
+        if (self.userChanged) {
+            var user = loginLib.currentUser();
+            self.selected(user ? user.name : undefined);
+            self.userChanged = false;
+        }
+    };
+
+    self.requestUsers = function requestAllUsersFromBackend(force) {
+        self.requestInProgress(true);
+        return api.user.list(force).done(function (response) {
+            self.processUsers(response);
+        }).always(function () {
+            self.requestInProgress(false);
+        });
+    };
+};
 /* global WorkLog ItemListHelper ko gettext Utils OctoPrint _ */
 
 WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
@@ -345,6 +494,19 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
 
     self.searchQuery.subscribe(function () {
         self.performSearch();
+    });
+
+    fltUser.selected.subscribe(function () {
+        self.applyFilterChange();
+    });
+    fltPrinter.selected.subscribe(function () {
+        self.applyFilterChange();
+    });
+    fltStatus.selected.subscribe(function () {
+        self.applyFilterChange();
+    });
+    fltPeriod.selected.subscribe(function () {
+        self.applyFilterChange();
     });
 
     connLib.selectedPrinter.subscribe(function () {
@@ -390,18 +552,27 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         }
     }, {
         user: function user(data) {
-            return fltUser.selected() === undefined || data.user_name === fltUser.selected();
+            return fltUser.test(data.user_name);
         },
         printer: function printer(data) {
-            return fltPrinter.selected() === undefined || data.printer_name === fltPrinter.selected();
+            return fltPrinter.test(data.printer_name);
         },
         status: function status(data) {
-            return fltStatus.selected() === undefined || data.status === fltStatus.selected();
+            return fltStatus.test(data.status);
         },
         period: function period(data) {
-            return fltPeriod.selected() === undefined || fltPeriod.isValid(data.start_time);
+            return fltPeriod.test(data.start_time);
         }
     }, 'startAsc', [], [], 10);
+
+    self.allJobs.addFilter('user'); // add filter explicitly
+    self.allJobs.addFilter('printer'); // add filter explicitly
+    self.allJobs.addFilter('status'); // add filter explicitly
+    self.allJobs.addFilter('period'); // add filter explicitly
+
+    self.allJobs.items.subscribe(function () {
+        self.updateTotals();
+    });
 
     self.jobStatusText = function getJobStatusText(status) {
         switch (status) {// eslint-disable-line default-case
@@ -493,15 +664,10 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         if (query !== undefined && query !== '') {
             query = query.toLocaleLowerCase();
 
-            var recursiveSearch = function recursiveSearch(entry) {
-                // eslint-disable-line func-names
-                if (entry === undefined) {
-                    return false;
-                }
+            self.allJobs.changeSearchFunction(function (entry) {
+                // eslint-disable-line func-names, prefer-arrow-callback
                 return entry.file.toLocaleLowerCase().indexOf(query) > -1;
-            };
-
-            self.allJobs.changeSearchFunction(recursiveSearch);
+            });
         } else {
             self.allJobs.resetSearch();
         }
@@ -514,10 +680,19 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         return self.requestInProgress() || fltPrinter.requestInProgress() || fltUser.requestInProgress();
     });
 
-    self.onFilterChanged = function processFilterChanger() {
+    self.updateTotals = function updateJobsTotals() {
+        var items = self.allJobs.items();
+        var duration = 0;
+        for (var i = 0, lim = items.length; i < lim; i++) {
+            duration += items[i].duration;
+        }
+        self.totalQuantity(items.length);
+        self.totalDuration(formatDuration(duration));
+    };
+
+    self.applyFilterChange = function processFilterChange() {
         self.allJobs.refresh();
         self.allJobs.currentPage(0);
-        self.requestTotals(true);
     };
 
     self.processJobs = function processRequestedJobs(data) {
@@ -562,195 +737,6 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         self.requestInProgress(true);
         return OctoPrint.files.list(true).done(function (response) {
             self.processOctoprintFiles(response);
-        }).always(function () {
-            self.requestInProgress(false);
-        });
-    };
-
-    self.processTotals = function processRequestedTotals(data) {
-        var totals = data.totals;
-        //~ Utils.printJSON(totals);
-
-        if (totals !== undefined) {
-            ;
-            self.totalQuantity(totals.total_quantity);
-            self.totalDuration(formatDuration(Utils.validInt(totals.total_duration)));
-        }
-    };
-
-    self.requestTotals = function requestTotalsFromBackend(force) {
-        self.requestInProgress(true);
-        var filters = {
-            user: fltUser.selected(),
-            printer: fltPrinter.selected(),
-            status: fltStatus.selected(),
-            begin: fltPeriod.begin,
-            end: fltPeriod.end
-        };
-
-        return api.totals.get(force, filters).done(function (response) {
-            self.processTotals(response);
-        }).always(function () {
-            self.requestInProgress(false);
-        });
-    };
-};
-/* global WorkLog ko gettext */
-
-WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
-    var self = this.viewModels.periodFilter;
-    var history = this.viewModels.jobs;
-
-    self.allItems = ko.observableArray([{ name: gettext('Day'), value: 0 }, { name: gettext('Week'), value: 1 }, { name: gettext('Month'), value: 2 }, { name: gettext('Year'), value: 3 }]);
-    self.selected = ko.observable();
-
-    self.begin = -1;
-    self.end = -1;
-
-    history.allJobs.addFilter('period');
-
-    self.changed = function periodFilterChanged() {
-        var now = new Date();
-        var y = now.getFullYear();
-        var m = now.getMonth();
-        var d = now.getDate();
-
-        switch (self.selected()) {
-            case 0:
-                self.begin = new Date(y, m, d).getTime() / 1000;
-                self.end = new Date(y, m, d + 1).getTime() / 1000;
-                break;
-            case 1:
-                {
-                    var day = now.getDay();
-                    var dw = d - day - (day === 0 ? 6 : -1);
-                    self.begin = new Date(y, m, dw).getTime() / 1000;
-                    self.end = new Date(y, m, dw + 8).getTime() / 1000;
-                }
-                break;
-            case 2:
-                self.begin = new Date(y, m).getTime() / 1000;
-                self.end = new Date(y, m + 1, 1).getTime() / 1000;
-                break;
-            case 3:
-                self.begin = new Date(y, 0).getTime() / 1000;
-                self.end = new Date(y + 1, 0, 1).getTime() / 1000;
-                break;
-            default:
-                self.begin = -1;
-                self.end = -1;
-        }
-
-        console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
-        history.onFilterChanged();
-    };
-
-    self.isValid = function periodCheckCondition(date) {
-        return self.begin < 0 || date >= self.begin && date < self.end;
-    };
-};
-/* global WorkLog ko */
-
-WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
-    var self = this.viewModels.printerFilter;
-    var api = this.core.client;
-    var history = this.viewModels.jobs;
-
-    var connLib = this.core.bridge.allViewModels.connectionViewModel;
-
-    self.allItems = ko.observableArray([]);
-    self.selected = ko.observable();
-    self.requestInProgress = ko.observable(false);
-
-    self.printerChanged = false;
-    connLib.selectedPrinter.subscribe(function () {
-        self.printerChanged = true;
-    });
-
-    history.allJobs.addFilter('printer');
-
-    self.changed = function printerFilterChanged() {
-        history.onFilterChanged();
-    };
-
-    self.processPrinters = function processRequestedPrinters(data) {
-        var printers = data.printers;
-
-        if (printers === undefined) printers = [];
-        self.allItems(printers);
-
-        if (self.printerChanged) {
-            profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
-            self.selected(profile ? profile.name : undefined);
-
-            self.printerChanged = false;
-        }
-    };
-
-    self.requestPrinters = function requestAllPrintersFromBackend(force) {
-        self.requestInProgress(true);
-        return api.printer.list(force).done(function (response) {
-            self.processPrinters(response);
-        }).always(function () {
-            self.requestInProgress(false);
-        });
-    };
-};
-/* global WorkLog ko gettext */
-
-WorkLog.prototype.viewModels.statusFilter = function statusFilterViewModel() {
-    var self = this.viewModels.statusFilter;
-    var history = this.viewModels.jobs;
-
-    self.allItems = ko.observableArray([{ name: gettext('Printed'), value: 1 }, { name: gettext('Failed'), value: 0 }]);
-    self.selected = ko.observable();
-    history.allJobs.addFilter('status');
-
-    self.changed = function statusFilterChanged() {
-        history.onFilterChanged();
-    };
-};
-/* global WorkLog ko Utils */
-
-WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
-    var self = this.viewModels.userFilter;
-    var api = this.core.client;
-    var history = this.viewModels.jobs;
-
-    var loginLib = this.core.bridge.allViewModels.loginStateViewModel;
-
-    self.allItems = ko.observableArray([]);
-    self.selected = ko.observable();
-    self.requestInProgress = ko.observable(false);
-
-    self.userChanged = false;
-    loginLib.currentUser.subscribe(function () {
-        self.userChanged = true;
-    });
-
-    history.allJobs.addFilter('user');
-
-    self.changed = function userFilterChanged() {
-        history.onFilterChanged();
-    };
-
-    self.processUsers = function processRequestedUsers(data) {
-        var users = data.users;
-
-        if (users === undefined) users = [];
-        self.allItems(users);
-
-        if (self.userChanged) {
-            var user = loginLib.currentUser();
-            self.selected(user ? user.name : undefined);
-            self.userChanged = false;
-        }
-    };
-
-    self.requestUsers = function requestAllUsersFromBackend(force) {
-        self.requestInProgress(true);
-        return api.user.list(force).done(function (response) {
-            self.processUsers(response);
         }).always(function () {
             self.requestInProgress(false);
         });

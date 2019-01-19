@@ -22,6 +22,11 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     self.searchQuery = ko.observable(undefined);
 
     self.searchQuery.subscribe(() => { self.performSearch(); });
+    
+    fltUser.selected.subscribe(() => { self.applyFilterChange(); });
+    fltPrinter.selected.subscribe(() => { self.applyFilterChange(); });
+    fltStatus.selected.subscribe(() => { self.applyFilterChange(); });
+    fltPeriod.selected.subscribe(() => { self.applyFilterChange(); });
 
     connLib.selectedPrinter.subscribe(() => { self.processActivePrinter(); });
 
@@ -67,20 +72,37 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         },
         {
             user(data) {
-                return fltUser.selected() === undefined || data.user_name === fltUser.selected();
+                return fltUser.test(data.user_name);
             },
             printer(data) {
-                return fltPrinter.selected() === undefined || data.printer_name === fltPrinter.selected();
+                return fltPrinter.test(data.printer_name);
             },
             status(data) {
-                return fltStatus.selected() === undefined || data.status === fltStatus.selected();
+                return fltStatus.test(data.status);
             },
             period(data) {
-                return fltPeriod.selected() === undefined || fltPeriod.isValid(data.start_time);
+                return fltPeriod.test(data.start_time);
             },
         },
         'startAsc', [], [], 10,
     );
+
+    self.allJobs.addFilter('user'); // add filter explicitly
+    self.allJobs.addFilter('printer'); // add filter explicitly
+    self.allJobs.addFilter('status'); // add filter explicitly
+    self.allJobs.addFilter('period'); // add filter explicitly
+    
+    self.allJobs.items.subscribe(() => { self.updateTotals(); });
+
+    self.updateTotals = function updateJobsTotals() {
+        const items = self.allJobs.items();
+        var duration = 0;
+        for (var i = 0, lim = items.length; i < lim; i++) {
+            duration += items[i].duration;
+        } 
+        self.totalQuantity(items.length);
+        self.totalDuration(formatDuration(duration));
+    };
 
     self.jobStatusText = function getJobStatusText(status) {
         switch (status) { // eslint-disable-line default-case
@@ -188,49 +210,10 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             || fltUser.requestInProgress();
     });
 
-    //~ self.allJobs.items.subscribe(function(newValue) {
-        //~ var totalTime = 0;
-        //~ var totalUsage = {
-            //~ length: 0,
-            //~ volume: 0
-        //~ };
-        //~ var averageUsage = {
-            //~ length: 0,
-            //~ volume: 0
-        //~ };
-//~ 
-        //~ var itemList = newValue;
-        //~ var itemListLength = itemList.length;
-        //~ for (var i = 0; i < itemListLength; i++) {
-            //~ totalTime += itemList[i].printTime();
-//~ 
-            //~ totalUsage.length += itemList[i].filamentLength();
-            //~ totalUsage.volume += itemList[i].filamentVolume();
-        //~ }
-//~ 
-        //~ self.totalTime(formatDuration(totalTime));
-        //~ self.totalUsage(formatFilament(totalUsage));
-//~ 
-        //~ averageUsage.length = totalUsage.length / itemListLength;
-        //~ averageUsage.volume = totalUsage.volume / itemListLength;
-//~ 
-        //~ self.averageTime(formatDuration(totalTime / itemListLength));
-        //~ self.averageUsage(formatFilament(averageUsage));
-    //~ });
-//~ 
-    //~ self.updateTotals = function updateHistoryTotals() {
-        //~ if (self.allJobs.searchFunction) {
-            //~ self.calculateTotals();
-        //~ } else {
-            //~ self.requestTotals();
-        //~ }
-    //~ }
-
-    self.onFilterChanged = function processFilterChanger() {
+    self.applyFilterChange = function processFilterChange() {
         self.allJobs.refresh();
         self.allJobs.currentPage(0);
-        self.requestTotals(true);
-    }
+    };
     
     self.processJobs = function processRequestedJobs(data) {
         self.allJobs.updateItems(data.jobs);
@@ -244,7 +227,7 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     };
 
     self.processActivePrinter = function processActivePrinterChange() {
-        profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() })
+        profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
         self.activePrinter = profile ? profile.name : undefined;
     };
 
@@ -268,30 +251,6 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         self.requestInProgress(true);
         return OctoPrint.files.list(true)
             .done((response) => { self.processOctoprintFiles(response); })
-            .always(() => { self.requestInProgress(false); });
-    };
-
-    self.processTotals = function processRequestedTotals(data) {
-        const { totals } = data;
-        //~ Utils.printJSON(totals);
-        if (totals !== undefined) {;
-            self.totalQuantity(totals.total_quantity);
-            self.totalDuration(formatDuration(Utils.validInt(totals.total_duration)));
-        }
-    };
-
-    self.requestTotals = function requestTotalsFromBackend(force) {
-        self.requestInProgress(true);
-        const filters = {
-            user: fltUser.selected(),
-            printer: fltPrinter.selected(),
-            status: fltStatus.selected(),
-            begin: fltPeriod.begin,
-            end: fltPeriod.end,
-        }
-            
-        return api.totals.get(force, filters)
-            .done((response) => { self.processTotals(response); })
             .always(() => { self.requestInProgress(false); });
     };
 };

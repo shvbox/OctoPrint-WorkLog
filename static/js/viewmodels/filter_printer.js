@@ -3,21 +3,19 @@
 WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
     const self = this.viewModels.printerFilter;
     const api = this.core.client;
-    const history = this.viewModels.jobs;
 
     const connLib = this.core.bridge.allViewModels.connectionViewModel;
 
     self.allItems = ko.observableArray([]);
     self.selected = ko.observable();
+    
     self.requestInProgress = ko.observable(false);
     
     self.printerChanged = false;
     connLib.selectedPrinter.subscribe(() => { self.printerChanged = true; });
 
-    history.allJobs.addFilter('printer');
-
-    self.changed = function printerFilterChanged() {
-        history.onFilterChanged();
+    self.test = function testDataValue(value) {
+        return self.selected() === undefined || value === self.selected();
     };
 
     self.processPrinters = function processRequestedPrinters(data) {
