@@ -1,14 +1,15 @@
 # coding=utf-8
 from __future__ import absolute_import
 
-import octoprint.plugin
 import os
 import time
+
+import octoprint.plugin
 import octoprint.printer.profile
 
-from octoprint.settings import settings
+from octoprint.settings import settings, valid_boolean_trues
 from octoprint.events import Events
-from flask_login import current_user
+from octoprint.util.version import is_octoprint_compatible
 
 from .api import WorkLogApi
 from .data import WorkLog
@@ -40,16 +41,17 @@ class WorkLogPlugin(WorkLogApi,
 
         self.client_id = get_client_id()
 
-        self._db_path = os.path.join(self.get_plugin_data_folder(), "worklog.db")
-        db_config = {
-            "path": os.path.join(self.get_plugin_data_folder(), "worklog.db"),
-            "clientId": self.client_id,
-            "logger": self._logger
-            }
+        db_config = self._settings.get(["database"], merged=True)
+
+        if db_config["useExternal"] not in valid_boolean_trues:
+            # set uri for internal sqlite database
+            db_path = os.path.join(self.get_plugin_data_folder(), "worklog.db")
+            db_config["uri"] = "sqlite:///" + db_path
+            db_config["clientId"] = self.client_id
         
         try:
             # initialize database
-            self.work_log = WorkLog(db_config)
+            self.work_log = WorkLog(db_config, self._logger)
             self.work_log.initialize()
             
         except Exception as e:
@@ -131,11 +133,11 @@ class WorkLogPlugin(WorkLogApi,
             #~ self._logger.info("%s" % (settings().get(["folder", "uploads"]),))
                 
             data = {
-                "printer": self.get_current_printer(),
-                "user": self._printer.get_current_job()["user"],
+                "printer_name": self.get_current_printer(),
+                "user_name": self._printer.get_current_job()["user"],
                 "file": payload["name"],
                 "origin": payload["origin"],
-                "path": payload["path"]
+                "file_path": payload["path"]
                 }
 
             if event == Events.PRINT_STARTED:
@@ -144,17 +146,17 @@ class WorkLogPlugin(WorkLogApi,
                 
                 if self._last_state == "PAUSED":
                     data2 = data
-                    data["end"] = time.time()
+                    data["end_time"] = time.time()
                     data2["status"] = self.work_log.STATUS_FAIL
                     data2["notes"] = r"restarted"
                     self.update_current_job(data)
                     
-                data["start"] = time.time()
+                data["start_time"] = time.time()
                 self.work_log.start_job(data)
                 self.send_client_message("data_changed", data=dict(table="jobs", action="update"))
 
             else:
-                data["end"] = time.time()
+                data["end_time"] = time.time()
                 if event == Events.PRINT_DONE:
                     self._logger.info("PRINT_DONE: ")
                     self._logger.info(self._printer.get_current_job())
@@ -184,6 +186,41 @@ class WorkLogPlugin(WorkLogApi,
     def get_current_printer(self):
         current = self._printer_profile_manager.get_current()
         return current["name"] if current != None else None
-        
+
+    #~~ Softwareupdate hook
+    def get_update_information(self):
+        return dict(
+            worklog=dict(
+                displayName="Work Log",
+                displayVersion=self._plugin_version,
+
+                # version check: github repository
+                type="github_release",
+                user="shvbox",
+                repo="OctoPrint-WorkLog",
+                current=self._plugin_version,
+
+                # update method: pip
+                pip="https://github.com/shvbox/OctoPrint-WorkLog/archive/{target_version}.zip"
+            )
+        )
+
 __plugin_name__ = "Work Log"
-__plugin_implementation__ = WorkLogPlugin()
+__required_octoprint_version__ = ">=1.3.6"
+
+def __plugin_load__():
+    if not is_octoprint_compatible(__required_octoprint_version__):
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error("OctoPrint version is not compatible ({version} required)"
+                     .format(version=__required_octoprint_version__))
+        return
+        
+    global __plugin_implementation__
+    __plugin_implementation__ = WorkLogPlugin()
+    
+    global __plugin_hooks__
+    __plugin_hooks__ = {
+        "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
+    }
+    

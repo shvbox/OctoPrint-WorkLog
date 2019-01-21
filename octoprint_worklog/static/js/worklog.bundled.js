@@ -380,6 +380,7 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
 
     self.allItems = ko.observableArray([]);
     self.selected = ko.observable();
+
     self.requestInProgress = ko.observable(false);
 
     self.printerChanged = false;
@@ -574,6 +575,16 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         self.updateTotals();
     });
 
+    self.updateTotals = function updateJobsTotals() {
+        var items = self.allJobs.items();
+        var duration = 0;
+        for (var i = 0, lim = items.length; i < lim; i++) {
+            duration += items[i].duration;
+        }
+        self.totalQuantity(items.length);
+        self.totalDuration(formatDuration(duration));
+    };
+
     self.jobStatusText = function getJobStatusText(status) {
         switch (status) {// eslint-disable-line default-case
             case 0:
@@ -679,16 +690,6 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         // eslint-disable-line func-names, prefer-arrow-callback
         return self.requestInProgress() || fltPrinter.requestInProgress() || fltUser.requestInProgress();
     });
-
-    self.updateTotals = function updateJobsTotals() {
-        var items = self.allJobs.items();
-        var duration = 0;
-        for (var i = 0, lim = items.length; i < lim; i++) {
-            duration += items[i].duration;
-        }
-        self.totalQuantity(items.length);
-        self.totalDuration(formatDuration(duration));
-    };
 
     self.applyFilterChange = function processFilterChange() {
         self.allJobs.refresh();
