@@ -109,7 +109,7 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     };
 
     self.jobStatusToggle = function processJobStatusDoubleClick(item) {
-        if (!item || item.notes) return;
+        if (!item || item.notes || item.status == -1) return;
         //~ console.log('jobStatusToggle');
         const itemCopy = item;
         itemCopy.status = item.status === 0 ? 1 : 0;
