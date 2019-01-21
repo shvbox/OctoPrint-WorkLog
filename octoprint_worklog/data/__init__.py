@@ -314,6 +314,8 @@ class WorkLog(object):
     def _result_to_dict(self, result, one=False):
         if one:
             row = result.fetchone()
+            self._logger.info('_result_to_dict')
+            self._logger.info(row)
             return dict(row) if row is not None else None
         else:
             return [dict(row) for row in result.fetchall()]

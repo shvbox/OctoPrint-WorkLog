@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import os
 import time
+import datetime
 
 import octoprint.plugin
 import octoprint.printer.profile
@@ -24,7 +25,6 @@ class WorkLogPlugin(WorkLogApi,
                         
     def __init__(self):
         self._db_path = None
-        self._user = None
         self._last_state = None
         
         self.client_id = None
@@ -128,7 +128,7 @@ class WorkLogPlugin(WorkLogApi,
             or event == Events.PRINT_DONE
             or event == Events.PRINT_FAILED):
                     
-            self._logger.info("%s %s %s" % (event, self._user, self._last_state))
+            self._logger.info("%s %s" % (event, self._last_state))
             #~ self._logger.info("%s" % payload)
             #~ self._logger.info("%s" % (settings().get(["folder", "uploads"]),))
                 
@@ -174,6 +174,8 @@ class WorkLogPlugin(WorkLogApi,
     def update_current_job(self, data):
         currentJob = self.work_log.get_active_job()
         if currentJob != None:
+            if data["user_name"] is None:
+                data["user_name"] = currentJob["user_name"]
             self.work_log.finish_job(currentJob.get("id"), data)
             self.on_data_modified("jobs", "update")
             
