@@ -2,7 +2,6 @@
 
 WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
     const self = this;
-    const usersLib = this.core.bridge.allViewModels.loginStateViewModel;
 
     // self.onStartup = function onStartupCallback() {
         // self.viewModels.warning.replaceFilamentView();

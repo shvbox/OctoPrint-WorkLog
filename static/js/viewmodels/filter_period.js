@@ -45,8 +45,7 @@ WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
             self.end = -1;
         }
 
-        console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
-        history.onFilterChanged();
+        // console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
     };
 
     self.test = function testDataValue(value) {

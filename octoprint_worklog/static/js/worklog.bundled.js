@@ -144,7 +144,6 @@ WorkLog.prototype.core.bridge = function pluginBridge() {
 
 WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
     var self = this;
-    var usersLib = this.core.bridge.allViewModels.loginStateViewModel;
 
     // self.onStartup = function onStartupCallback() {
     // self.viewModels.warning.replaceFilamentView();
@@ -289,22 +288,22 @@ WorkLog.prototype.core.client = function apiClient() {
                     printer = filters.printer,
                     status = filters.status,
                     begin = filters.begin,
-                    end = filters.end;
+                    end = filters.end; // eslint-disable-line object-curly-newline
 
                 if (user) {
-                    query['user'] = user;
+                    query.user = user;
                 }
                 if (printer) {
-                    query['printer'] = printer;
+                    query.printer = printer;
                 }
                 if (status !== undefined) {
-                    query['status'] = status;
+                    query.status = status;
                 }
                 if (begin > 0) {
-                    query['begin'] = begin;
+                    query.begin = begin;
                 }
                 if (end > 0) {
-                    query['end'] = end;
+                    query.end = end;
                 }
             }
             return OctoPrint.getWithQuery(totalsUrl(), query, opts);
@@ -362,15 +361,14 @@ WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
                 self.end = -1;
         }
 
-        console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
-        history.onFilterChanged();
+        // console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
     };
 
     self.test = function testDataValue(value) {
         return self.selected() === undefined || self.begin < 0 || value >= self.begin && value < self.end;
     };
 };
-/* global WorkLog ko */
+/* global WorkLog ko _ */
 
 WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
     var self = this.viewModels.printerFilter;
@@ -399,7 +397,7 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
         self.allItems(printers);
 
         if (self.printerChanged) {
-            profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
+            var profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
             self.selected(profile ? profile.name : undefined);
 
             self.printerChanged = false;
@@ -427,7 +425,7 @@ WorkLog.prototype.viewModels.statusFilter = function statusFilterViewModel() {
         return self.selected() === undefined || value === self.selected();
     };
 };
-/* global WorkLog ko Utils */
+/* global WorkLog ko */
 
 WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
     var self = this.viewModels.userFilter;
@@ -470,7 +468,7 @@ WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
         });
     };
 };
-/* global WorkLog ItemListHelper ko gettext Utils OctoPrint _ */
+/* global WorkLog ItemListHelper ko gettext Utils OctoPrint PNotify formatDuration _ */
 
 WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     var self = this.viewModels.jobs;
@@ -578,11 +576,23 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     self.updateTotals = function updateJobsTotals() {
         var items = self.allJobs.items();
         var duration = 0;
-        for (var i = 0, lim = items.length; i < lim; i++) {
+        for (var i = 0, lim = items.length; i < lim; i += 1) {
             duration += items[i].duration;
         }
         self.totalQuantity(items.length);
         self.totalDuration(formatDuration(duration));
+    };
+
+    self.jobStatusTitle = function getJobStatusTitle(item) {
+        return item.notes ? '' : gettext('Double-click to toggle');
+    };
+
+    self.jobStatusToggle = function processJobStatusDoubleClick(item) {
+        if (!item || item.notes) return;
+        //~ console.log('jobStatusToggle');
+        var itemCopy = item;
+        itemCopy.status = item.status === 0 ? 1 : 0;
+        self.updateJob(itemCopy);
     };
 
     self.jobStatusText = function getJobStatusText(status) {
@@ -644,19 +654,18 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         return false;
     };
 
-    self.printAgain = function loadAndPrintAgain(data) {
-        if (!data) {
-            return;
-        }
+    self.printAgain = function loadAndPrintAgain(item) {
+        if (!item) return;
+        //~ console.log('printAgain');
 
-        if (filesLib.listHelper.isSelected(data) && filesLib.enablePrint(data)) {
+        if (filesLib.listHelper.isSelected(item) && filesLib.enablePrint(item)) {
             // file was already selected, just start the print job
             OctoPrint.job.start();
         } else {
             // select file, start print job (if requested and within dimensions)
-            var print = filesLib.evaluatePrintDimensions(data, true);
+            var print = filesLib.evaluatePrintDimensions(item, true);
 
-            OctoPrint.files.select(data.origin, data.file_path, print);
+            OctoPrint.files.select(item.origin, item.file_path, print);
         }
     };
 
@@ -709,8 +718,23 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         });
     };
 
+    self.updateJob = function updateJobInBackend(item) {
+        self.requestInProgress(true);
+        api.job.update(item.id, item).done(function () {
+            self.requestJobs();
+        }).fail(function () {
+            new PNotify({ // eslint-disable-line no-new
+                title: gettext('Could not update job'),
+                text: gettext('There was an unexpected error while updating the job, please consult the logs.'),
+                type: 'error',
+                hide: false
+            });
+            self.requestInProgress(false);
+        });
+    };
+
     self.processActivePrinter = function processActivePrinterChange() {
-        profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
+        var profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
         self.activePrinter = profile ? profile.name : undefined;
     };
 

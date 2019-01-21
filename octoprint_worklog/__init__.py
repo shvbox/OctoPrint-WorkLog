@@ -153,7 +153,7 @@ class WorkLogPlugin(WorkLogApi,
                     
                 data["start_time"] = time.time()
                 self.work_log.start_job(data)
-                self.send_client_message("data_changed", data=dict(table="jobs", action="update"))
+                self.on_data_modified("jobs", "update")
 
             else:
                 data["end_time"] = time.time()
@@ -175,10 +175,14 @@ class WorkLogPlugin(WorkLogApi,
         currentJob = self.work_log.get_active_job()
         if currentJob != None:
             self.work_log.finish_job(currentJob.get("id"), data)
-            self.send_client_message("data_changed", data=dict(table="jobs", action="update"))
+            self.on_data_modified("jobs", "update")
             
         else:
             self._logger.error("Can not retrieve id for current job. ID = %s" % self.client_id())
+
+    def on_data_modified(self, table, action):
+        if action.lower() == "update":
+            self.send_client_message("data_changed", data=dict(table=table, action=action))
     
     def send_client_message(self, message_type, data=None):
         self._plugin_manager.send_plugin_message(self._identifier, dict(type=message_type, data=data))

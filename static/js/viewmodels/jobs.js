@@ -1,4 +1,4 @@
-/* global WorkLog ItemListHelper ko gettext Utils OctoPrint _ */
+/* global WorkLog ItemListHelper ko gettext Utils OctoPrint PNotify formatDuration _ */
 
 WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     const self = this.viewModels.jobs;
@@ -17,12 +17,12 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
 
     self.totalQuantity = ko.observable(undefined);
     self.totalDuration = ko.observable(undefined);
-    
+
     self.requestInProgress = ko.observable(false);
     self.searchQuery = ko.observable(undefined);
 
     self.searchQuery.subscribe(() => { self.performSearch(); });
-    
+
     fltUser.selected.subscribe(() => { self.applyFilterChange(); });
     fltPrinter.selected.subscribe(() => { self.applyFilterChange(); });
     fltStatus.selected.subscribe(() => { self.applyFilterChange(); });
@@ -91,17 +91,29 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     self.allJobs.addFilter('printer'); // add filter explicitly
     self.allJobs.addFilter('status'); // add filter explicitly
     self.allJobs.addFilter('period'); // add filter explicitly
-    
+
     self.allJobs.items.subscribe(() => { self.updateTotals(); });
 
     self.updateTotals = function updateJobsTotals() {
         const items = self.allJobs.items();
-        var duration = 0;
-        for (var i = 0, lim = items.length; i < lim; i++) {
+        let duration = 0;
+        for (let i = 0, lim = items.length; i < lim; i += 1) {
             duration += items[i].duration;
-        } 
+        }
         self.totalQuantity(items.length);
         self.totalDuration(formatDuration(duration));
+    };
+
+    self.jobStatusTitle = function getJobStatusTitle(item) {
+        return item.notes ? '' : gettext('Double-click to toggle');
+    };
+
+    self.jobStatusToggle = function processJobStatusDoubleClick(item) {
+        if (!item || item.notes) return;
+        //~ console.log('jobStatusToggle');
+        const itemCopy = item;
+        itemCopy.status = item.status === 0 ? 1 : 0;
+        self.updateJob(itemCopy);
     };
 
     self.jobStatusText = function getJobStatusText(status) {
@@ -163,19 +175,18 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         return false;
     };
 
-    self.printAgain = function loadAndPrintAgain(data) {
-        if (!data) {
-            return;
-        }
+    self.printAgain = function loadAndPrintAgain(item) {
+        if (!item) return;
+        //~ console.log('printAgain');
 
-        if (filesLib.listHelper.isSelected(data) && filesLib.enablePrint(data)) {
+        if (filesLib.listHelper.isSelected(item) && filesLib.enablePrint(item)) {
             // file was already selected, just start the print job
             OctoPrint.job.start();
         } else {
             // select file, start print job (if requested and within dimensions)
-            const print = filesLib.evaluatePrintDimensions(data, true);
+            const print = filesLib.evaluatePrintDimensions(item, true);
 
-            OctoPrint.files.select(data.origin, data.file_path, print);
+            OctoPrint.files.select(item.origin, item.file_path, print);
         }
     };
 
@@ -196,7 +207,6 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             self.allJobs.changeSearchFunction(function (entry) { // eslint-disable-line func-names, prefer-arrow-callback
                 return entry.file.toLocaleLowerCase().indexOf(query) > -1;
             });
-
         } else {
             self.allJobs.resetSearch();
         }
@@ -214,7 +224,7 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         self.allJobs.refresh();
         self.allJobs.currentPage(0);
     };
-    
+
     self.processJobs = function processRequestedJobs(data) {
         self.allJobs.updateItems(data.jobs);
     };
@@ -226,8 +236,25 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             .always(() => { self.requestInProgress(false); });
     };
 
+    self.updateJob = function updateJobInBackend(item) {
+        self.requestInProgress(true);
+        api.job.update(item.id, item)
+            .done(() => {
+                self.requestJobs();
+            })
+            .fail(() => {
+                new PNotify({ // eslint-disable-line no-new
+                    title: gettext('Could not update job'),
+                    text: gettext('There was an unexpected error while updating the job, please consult the logs.'),
+                    type: 'error',
+                    hide: false,
+                });
+                self.requestInProgress(false);
+            });
+    };
+
     self.processActivePrinter = function processActivePrinterChange() {
-        profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
+        const profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
         self.activePrinter = profile ? profile.name : undefined;
     };
 

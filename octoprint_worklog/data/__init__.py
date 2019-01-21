@@ -13,7 +13,7 @@ from uritools import urisplit
 from sqlalchemy.engine.url import URL
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.schema import MetaData, Table, Column, DDL, PrimaryKeyConstraint
-from sqlalchemy.sql import insert, update, delete, select, label
+from sqlalchemy.sql import insert, update, delete, select, label, case
 from sqlalchemy.types import Integer, String, TIMESTAMP
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 import sqlalchemy.sql.functions as func
@@ -50,7 +50,6 @@ class WorkLog(object):
         #~ elif self.engine_dialect_is(self.DIALECT_POSTGRESQL):
             # Create listener thread
             #~ self.notify = PGNotify(self.conn.engine.url)
-
 
     def connect(self, uri, database="", username="", password=""):
         uri_parts = urisplit(uri)
@@ -145,7 +144,7 @@ class WorkLog(object):
             self.set_schema_version(self.DB_VERSION)
             schemaVersion = self.DB_VERSION
             
-        self._logger.info("schema version: %s" % schemaVersion)
+        self._logger.info("Schema version: %s" % schemaVersion)
 
     # versioning
 
@@ -183,103 +182,84 @@ class WorkLog(object):
 
     def get_all_jobs(self):
         #~ self._logger.info("get_all_jobs")
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-        cur  = conn.cursor()
-        cur.execute("SELECT *, CASE WHEN (end_time < start_time) THEN 0 ELSE (end_time - start_time) END AS duration FROM jobs")
-        result = self._result_to_dict(cur)
-        conn.close()
-        return result
-        #~ with self.lock, self.conn.begin():
-            #~ stmt = select([self.jobs]).order_by(self.jobs.c.material, self.jobs.c.vendor)
-            #~ result = self.conn.execute(stmt)
-        #~ return self._result_to_dict(result)
+        with self.lock, self.conn.begin():
+            stmt = select(\
+                    [self.jobs,\
+                    case([(self.jobs.c.end_time < self.jobs.c.start_time, text("0"))],
+                    else_=self.jobs.c.end_time - self.jobs.c.start_time).label("duration")])
+            result = self.conn.execute(stmt)
+        return self._result_to_dict(result)
         
     def get_job(self, identifier):
         #~ self._logger.info("get_job")
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-        cur  = conn.cursor()
-        cur.execute("SELECT *,  CASE WHEN (end_time < start_time) THEN 0 ELSE (end_time - start_time) END AS duration FROM jobs WHERE id=?", (identifier,))
-        result = self._result_to_dict(cur)
-        conn.close()
-        return result
-        #~ with self.lock, self.conn.begin():
-            #~ stmt = select([self.jobs]).where(self.jobs.c.id == identifier)\
-                #~ .order_by(self.jobs.c.material, self.jobs.c.vendor)
-            #~ result = self.conn.execute(stmt)
-        #~ return self._result_to_dict(result, one=True)
+        with self.lock, self.conn.begin():
+            stmt = select(\
+                    [self.jobs,\
+                    case([(self.jobs.c.end_time < self.jobs.c.start_time, text("0"))],
+                    else_=self.jobs.c.end_time - self.jobs.c.start_time).label("duration")])\
+                .where(self.jobs.c.id == identifier)
+            result = self.conn.execute(stmt)
+        return self._result_to_dict(result, True)
 
-    
     def get_active_job(self):
         #~ self._logger.info("get_active_job")
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-        cur  = conn.cursor()
+        resultDict = None
+        with self.lock, self.conn.begin():
+            if not self._current_job_id is None:
+                #~ self._logger.info("get_active_job: id = %s" % self._current_job_id)
+                stmt = select([self.jobs]).where(self.jobs.c.id == self._current_job_id)
+                result = self.conn.execute(stmt)
+                resultDict = self._result_to_dict(result, True)
 
-        result = None
-        if not self._current_job_id is None:
-            self._logger.info("get_active_job: id = %s" % self._current_job_id)
-            cur.execute("SELECT * FROM jobs WHERE id=?", (self._current_job_id,))
-            result = self._result_to_dict(cur, True)
+            if resultDict is None:
+                #~ self._logger.info("get_active_job: client_id = %s" % self._client_id)
+                stmt = select([self.jobs])\
+                    .where((self.jobs.c.client_id == self._client_id)\
+                        & (self.jobs.c.status == self.STATUS_UNDEFINED))\
+                    .order_by(self.jobs.c.start_time)\
+                    .limit(1)
+                result = self.conn.execute(stmt)
+                resultDict = self._result_to_dict(result, True)
+                if not resultDict is None:
+                     self._current_job_id = resultDict.get("id")
+                     self._logger.info("Found stale job on client id=%s" % self._client_id)
 
-        if result is None:
-            self._logger.info("get_active_job: client_id = %s" % self._client_id)
-            cur.execute("SELECT * FROM jobs WHERE client_id=? AND status=? ORDER BY start_time LIMIT 1", (self._client_id, self.STATUS_UNDEFINED))
-            result = self._result_to_dict(cur, True)
-            if not result is None:
-                 self._current_job_id = result.get("id")
-                 self._logger.info("get_active_job: found stale job on client id=%s" % self._client_id)
-            
-        conn.close()
-        return result
+        return resultDict
 
     def start_job(self, data):
         #~ self._logger.info("start_job")
         data["client_id"] = self._client_id
-        sql = """\
-        INSERT INTO jobs (client_id, printer_name, user_name, file, origin, file_path, start_time) 
-        VALUES (:client_id, :printer_name, :user_name, :file, :origin, :file_path, :start_time)
-        """
-        conn = sqlite3.connect(self._db_path)
-        cur = conn.cursor()
-        cur.execute(sql, data)
-        conn.commit()
-        self._current_job_id = cur.lastrowid
+        with self.lock, self.conn.begin():
+            stmt = insert(self.jobs)\
+                .values(client_id=data["client_id"],
+                    printer_name=data["printer_name"], user_name=data["user_name"],
+                    file=data["file"], origin=data["origin"], file_path=data["file_path"],
+                    start_time=data["start_time"])
+            result = self.conn.execute(stmt)
+        self._current_job_id = result.lastrowid
         data["id"] = self._current_job_id
-        conn.close()
         return data
-        #~ with self.lock, self.conn.begin():
-            #~ stmt = insert(self.jobs)\
-                #~ .values(vendor=data["printer"], material=data["user"], density=data["file"],
-                        #~ diameter=data["start"])
-            #~ result = self.conn.execute(stmt)
-        #~ data["id"] = result.lastrowid
-        #~ return data
 
     def finish_job(self, identifier, data):
         #~ self._logger.info("finish_job")
-        data["id"] = identifier
-        sql = """\
-        UPDATE jobs 
-        SET user_name=:user_name, end_time=:end_time, status=:status, notes=:notes 
-        WHERE id=:id
-        ORDER BY id DESC 
-        LIMIT 1
-        """
-        conn = sqlite3.connect(self._db_path)
-        cur = conn.cursor()
-        cur.execute(sql, data)
-        conn.commit()
-        conn.close()
+        with self.lock, self.conn.begin():
+            stmt = update(self.jobs)\
+                .where(self.jobs.c.id == identifier)\
+                .values(user_name=data["user_name"], end_time=data["end_time"],
+                    status=data["status"], notes=data["notes"])
+            self.conn.execute(stmt)
+
         self._current_job_id = None
         return data
-         #~ with self.lock, self.conn.begin():
-            #~ stmt = update(self.jobs).where(self.jobs.c.id == identifier)\
-                #~ .values(vendor=data["vendor"], material=data["material"], density=data["density"],
-                        #~ diameter=data["diameter"])
-            #~ self.conn.execute(stmt)
-        #~ return data
+
+    def update_job(self, identifier, data):
+        #~ self._logger.info("update_job")
+        with self.lock, self.conn.begin():
+            stmt = update(self.jobs)\
+                .where(self.jobs.c.id == identifier)\
+                .values(status=data["status"], notes=data["notes"])
+            self.conn.execute(stmt)
+        return data
 
     #~ def get_job_totals(self, conditions):
         #~ sql = """\
@@ -303,50 +283,33 @@ class WorkLog(object):
         
     def get_all_users(self):
         #~ self._logger.info("get_all_users")
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-        cur  = conn.cursor()
-        cur.execute("SELECT * FROM users ORDER BY name")
-        result = self._result_to_dict(cur)
-        conn.close()
-        #~ self._logger.info("get_all_users: %s", (result,))
-        return result
+        with self.lock, self.conn.begin():
+            stmt = select([self.users]).order_by(self.users.c.name)
+            result = self.conn.execute(stmt)
+        return self._result_to_dict(result)
 
     def get_user(self, name):
         #~ self._logger.info("get_user")
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-        cur  = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE name=?", (name,))
-        result = self._result_to_dict(cur, True)
-        conn.close()
-        #~ self._logger.info("get_all_users: %s", (result,))
-        return result
-        
+        with self.lock, self.conn.begin():
+            stmt = select([self.users]).where(self.users.c.name == name)
+            result = self.conn.execute(stmt)
+        return self._result_to_dict(result)
+
     def get_all_printers(self):
         #~ self._logger.info("get_all_printers")
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-        cur  = conn.cursor()
-        cur.execute("SELECT * FROM printers ORDER BY name")
-        result = self._result_to_dict(cur)
-        conn.close()
-        #~ self._logger.info("get_all_printers: %s", (result,))
-        return result
+        with self.lock, self.conn.begin():
+            stmt = select([self.printers]).order_by(self.printers.c.name)
+            result = self.conn.execute(stmt)
+        return self._result_to_dict(result)
 
     def get_printer(self, name):
         #~ self._logger.info("get_printer")
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-        cur  = conn.cursor()
-        result = None
-        cur.execute("SELECT * FROM printers WHERE name=?", (name,))
-        result = self._result_to_dict(cur, True)
-        conn.close()
-        #~ self._logger.info("get_all_printers: %s", (result,))
-        return result
+        with self.lock, self.conn.begin():
+            stmt = select([self.printers]).where(self.printers.c.name == name)
+            result = self.conn.execute(stmt)
+        return self._result_to_dict(result)
         
-    # helper
+    # helpers
 
     def _result_to_dict(self, result, one=False):
         if one:
@@ -355,3 +318,11 @@ class WorkLog(object):
         else:
             return [dict(row) for row in result.fetchall()]
 
+    def _get_compiled_sql(self, stmt):
+        try:
+            return str(stmt.compile(dialect=self.conn.engine.dialect))
+        except Exception as e:
+            self._logger.error("Failed to compile SQL: {message}".format(message=str(e)))
+
+        return "ERROR"
+            

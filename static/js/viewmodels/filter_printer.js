@@ -1,4 +1,4 @@
-/* global WorkLog ko */
+/* global WorkLog ko _ */
 
 WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
     const self = this.viewModels.printerFilter;
@@ -8,9 +8,9 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
 
     self.allItems = ko.observableArray([]);
     self.selected = ko.observable();
-    
+
     self.requestInProgress = ko.observable(false);
-    
+
     self.printerChanged = false;
     connLib.selectedPrinter.subscribe(() => { self.printerChanged = true; });
 
@@ -22,9 +22,9 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
         let { printers } = data;
         if (printers === undefined) printers = [];
         self.allItems(printers);
-        
+
         if (self.printerChanged) {
-            profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() })
+            const profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
             self.selected(profile ? profile.name : undefined);
 
             self.printerChanged = false;

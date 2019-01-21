@@ -15,7 +15,7 @@ import octoprint.plugin
 from octoprint.settings import valid_boolean_trues
 #~ from octoprint.server import admin_permission
 from octoprint.server.util.flask import restricted_access, check_lastmodified, check_etag
-#~ from octoprint.util import dict_merge
+from octoprint.util import dict_merge
 
 from .util import *
 
@@ -95,6 +95,45 @@ class WorkLogApi(octoprint.plugin.BlueprintPlugin):
             self._logger.error("Failed to fetch job with id {id}: {message}"
                                .format(id=str(identifier), message=str(e)))
             return make_response("Failed to fetch job, see the log for more details", 500)
+
+    @octoprint.plugin.BlueprintPlugin.route("/jobs/<int:identifier>", methods=["PATCH"])
+    #~ @restricted_access
+    def update_job(self, identifier):
+        #~ self._logger.info("update_job")
+        if "application/json" not in request.headers["Content-Type"]:
+            return make_response("Expected content-type JSON", 400)
+
+        try:
+            json_data = request.json
+        except BadRequest:
+            return make_response("Malformed JSON body in request", 400)
+
+        if "job" not in json_data:
+            return make_response("No job included in request", 400)
+
+        try:
+            job = self.work_log.get_job(identifier)
+        except Exception as e:
+            self._logger.error("Failed to fetch job with id {id}: {message}"
+                               .format(id=str(identifier), message=str(e)))
+            return make_response("Failed to fetch job, see the log for more details", 500)
+
+        if not job:
+            self._logger.warn("Profile with id {id} does not exist".format(id=identifier))
+            return make_response("Unknown job", 404)
+
+        updated_job = json_data["job"]
+        merged_job = dict_merge(job, updated_job)
+
+        try:
+            saved_job = self.work_log.update_job(identifier, merged_job)
+        except Exception as e:
+            self._logger.error("Failed to update job with id {id}: {message}"
+                               .format(id=str(identifier), message=str(e)))
+            return make_response("Failed to update job, see the log for more details", 500)
+        else:
+            self.on_data_modified("jobs", "update")
+            return jsonify(dict(job=saved_job))
 
     #~ @octoprint.plugin.BlueprintPlugin.route("/jobs", methods=["POST"])
     #~ @restricted_access
@@ -224,7 +263,7 @@ class WorkLogApi(octoprint.plugin.BlueprintPlugin):
                 #~ return make_response("Configuration does not contain mandatory '{}' field".format(key), 400)
 #~ 
         #~ try:
-            #~ connection = self.filamentManager.connect(config["uri"],
+            #~ connection = self.work_log.connect(config["uri"],
                                                       #~ database=config["name"],
                                                       #~ username=config["user"],
                                                       #~ password=config["password"])

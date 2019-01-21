@@ -1,9 +1,9 @@
-/* global WorkLog ko Utils */
+/* global WorkLog ko */
 
 WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
     const self = this.viewModels.userFilter;
     const api = this.core.client;
-    
+
     const loginLib = this.core.bridge.allViewModels.loginStateViewModel;
 
     self.allItems = ko.observableArray([]);
@@ -21,7 +21,7 @@ WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
         let { users } = data;
         if (users === undefined) users = [];
         self.allItems(users);
-        
+
         if (self.userChanged) {
             const user = loginLib.currentUser();
             self.selected(user ? user.name : undefined);
