@@ -17,7 +17,7 @@
             </div>
             <div class="worklog-filter" title="{{ _('Select period') }}">
                 <label class="control-label">{{ _('Period') }}</label>&nbsp;
-                <select class="worklog-filter-select" data-bind="options: viewModels.periodFilter.allItems, optionsText: 'name', optionsValue: 'value', optionsCaption: '{{ _('All') }}', value: viewModels.periodFilter.selected"></select>
+                <select class="worklog-filter-select" data-bind="options: viewModels.periodFilter.allItems, optionsText: 'name', optionsValue: 'value', optionsCaption: '{{ _('All') }}', value: viewModels.periodFilter.preSelected, event: { change: viewModels.periodFilter.changed }"></select>
             </div>
         </div>
     </div>
@@ -96,7 +96,7 @@
                         <td>
                             <span data-bind="text: formatDate(start_time)"></span>
                             <br>
-                            <span data-bind="text: formatDuration(duration)"></span>
+                            <span data-bind="text: formatDuration(duration), attr: { title: formatDate(end_time) }"></span>
                         </td>
                         <td>
                             <div class="btn btn-mini" data-bind="click: function() { $root.viewModels.jobs.printAgain($data); }, visible: $root.viewModels.jobs.showPrintAgain($data)" title="{{ _('Print again') }}"><i class="fa fa-print"></i></div>

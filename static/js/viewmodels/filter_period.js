@@ -10,6 +10,7 @@ WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
         { name: gettext('Year'), value: 3 },
     ]);
     self.selected = ko.observable();
+    self.preSelected = ko.observable();
 
     self.begin = -1;
     self.end = -1;
@@ -20,7 +21,7 @@ WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
         const m = now.getMonth();
         const d = now.getDate();
 
-        switch (self.selected()) {
+        switch (self.preSelected()) {
         case 0:
             self.begin = new Date(y, m, d).getTime() / 1000;
             self.end = new Date(y, m, d + 1).getTime() / 1000;
@@ -45,9 +46,11 @@ WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
             self.end = -1;
         }
 
-        // console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
+        self.selected(self.preSelected());
+        
+        console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
     };
-
+    
     self.test = function testDataValue(value) {
         return self.selected() === undefined
             || (self.begin < 0 || (value >= self.begin && value < self.end));

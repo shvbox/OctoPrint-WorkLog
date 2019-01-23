@@ -325,6 +325,7 @@ WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
 
     self.allItems = ko.observableArray([{ name: gettext('Day'), value: 0 }, { name: gettext('Week'), value: 1 }, { name: gettext('Month'), value: 2 }, { name: gettext('Year'), value: 3 }]);
     self.selected = ko.observable();
+    self.preSelected = ko.observable();
 
     self.begin = -1;
     self.end = -1;
@@ -335,7 +336,7 @@ WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
         var m = now.getMonth();
         var d = now.getDate();
 
-        switch (self.selected()) {
+        switch (self.preSelected()) {
             case 0:
                 self.begin = new Date(y, m, d).getTime() / 1000;
                 self.end = new Date(y, m, d + 1).getTime() / 1000;
@@ -361,7 +362,9 @@ WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
                 self.end = -1;
         }
 
-        // console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
+        self.selected(self.preSelected());
+
+        console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
     };
 
     self.test = function testDataValue(value) {
@@ -418,7 +421,7 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
 WorkLog.prototype.viewModels.statusFilter = function statusFilterViewModel() {
     var self = this.viewModels.statusFilter;
 
-    self.allItems = ko.observableArray([{ name: gettext('Printed'), value: 1 }, { name: gettext('Failed'), value: 0 }]);
+    self.allItems = ko.observableArray([{ name: gettext('Printed'), value: 1 }, { name: gettext('Failed'), value: 0 }, { name: gettext('In Print'), value: -1 }]);
     self.selected = ko.observable();
 
     self.test = function testDataValue(value) {

@@ -6,6 +6,7 @@ WorkLog.prototype.viewModels.statusFilter = function statusFilterViewModel() {
     self.allItems = ko.observableArray([
         { name: gettext('Printed'), value: 1 },
         { name: gettext('Failed'), value: 0 },
+        { name: gettext('In Print'), value: -1 },
     ]);
     self.selected = ko.observable();
 
