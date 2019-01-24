@@ -240,25 +240,21 @@ class WorkLog(object):
         data["id"] = self._current_job_id
         return data
 
-    def finish_job(self, identifier, data):
-        #~ self._logger.info("finish_job")
-        with self.lock, self.conn.begin():
-            stmt = update(self.jobs)\
-                .where(self.jobs.c.id == identifier)\
-                .values(user_name=data["user_name"], end_time=data["end_time"],
-                    status=data["status"], notes=data["notes"])
-            self.conn.execute(stmt)
-
-        self._current_job_id = None
-        return data
-
     def update_job(self, identifier, data):
         #~ self._logger.info("update_job")
         with self.lock, self.conn.begin():
             stmt = update(self.jobs)\
                 .where(self.jobs.c.id == identifier)\
-                .values(status=data["status"], notes=data["notes"])
+                .values(user_name=data["user_name"], end_time=data["end_time"],
+                        status=data["status"], notes=data["notes"])
             self.conn.execute(stmt)
+        return data
+
+    def finish_job(self, identifier, data):
+        #~ self._logger.info("finish_job")
+        self.update_job(identifier, data)
+        if identifier == self._current_job_id:
+            self._current_job_id = None
         return data
 
     #~ def get_job_totals(self, conditions):
@@ -314,8 +310,6 @@ class WorkLog(object):
     def _result_to_dict(self, result, one=False):
         if one:
             row = result.fetchone()
-            self._logger.info('_result_to_dict')
-            self._logger.info(row)
             return dict(row) if row is not None else None
         else:
             return [dict(row) for row in result.fetchall()]

@@ -276,39 +276,20 @@ WorkLog.prototype.core.client = function apiClient() {
         }
     };
 
-    self.totals = {
-        get: function get() {
-            var force = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
-            var filters = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : undefined;
-            var opts = arguments[2];
-
-            var query = force ? { force: force } : {};
-            if (filters) {
-                var user = filters.user,
-                    printer = filters.printer,
-                    status = filters.status,
-                    begin = filters.begin,
-                    end = filters.end; // eslint-disable-line object-curly-newline
-
-                if (user) {
-                    query.user = user;
-                }
-                if (printer) {
-                    query.printer = printer;
-                }
-                if (status !== undefined) {
-                    query.status = status;
-                }
-                if (begin > 0) {
-                    query.begin = begin;
-                }
-                if (end > 0) {
-                    query.end = end;
-                }
-            }
-            return OctoPrint.getWithQuery(totalsUrl(), query, opts);
-        }
-    };
+    //~ self.totals = {
+    //~ get(force = false, filters = undefined, opts) {
+    //~ const query = force ? { force } : {};
+    //~ if (filters) {
+    //~ const { user, printer, status, begin, end } = filters; // eslint-disable-line object-curly-newline
+    //~ if (user) { query.user = user; }
+    //~ if (printer) { query.printer = printer; }
+    //~ if (status !== undefined) { query.status = status; }
+    //~ if (begin > 0) { query.begin = begin; }
+    //~ if (end > 0) { query.end = end; }
+    //~ }
+    //~ return OctoPrint.getWithQuery(totalsUrl(), query, opts);
+    //~ },
+    //~ };
 
     self.database = {
         test: function test(config, opts) {
@@ -364,7 +345,7 @@ WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
 
         self.selected(self.preSelected());
 
-        console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
+        // console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
     };
 
     self.test = function testDataValue(value) {
@@ -587,11 +568,11 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     };
 
     self.jobStatusTitle = function getJobStatusTitle(item) {
-        return !item || item.notes || item.status == -1 ? '' : gettext('Double-click to toggle');
+        return !item || item.notes || item.status === -1 ? '' : gettext('Double-click to toggle');
     };
 
     self.jobStatusToggle = function processJobStatusDoubleClick(item) {
-        if (!item || item.notes || item.status == -1) return;
+        if (!item || item.notes || item.status === -1) return;
         var itemCopy = item;
         itemCopy.status = item.status === 0 ? 1 : 0;
         self.updateJob(itemCopy);

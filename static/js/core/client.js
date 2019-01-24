@@ -71,20 +71,20 @@ WorkLog.prototype.core.client = function apiClient() {
         },
     };
 
-    self.totals = {
-        get(force = false, filters = undefined, opts) {
-            const query = force ? { force } : {};
-            if (filters) {
-                const { user, printer, status, begin, end } = filters; // eslint-disable-line object-curly-newline
-                if (user) { query.user = user; }
-                if (printer) { query.printer = printer; }
-                if (status !== undefined) { query.status = status; }
-                if (begin > 0) { query.begin = begin; }
-                if (end > 0) { query.end = end; }
-            }
-            return OctoPrint.getWithQuery(totalsUrl(), query, opts);
-        },
-    };
+    //~ self.totals = {
+        //~ get(force = false, filters = undefined, opts) {
+            //~ const query = force ? { force } : {};
+            //~ if (filters) {
+                //~ const { user, printer, status, begin, end } = filters; // eslint-disable-line object-curly-newline
+                //~ if (user) { query.user = user; }
+                //~ if (printer) { query.printer = printer; }
+                //~ if (status !== undefined) { query.status = status; }
+                //~ if (begin > 0) { query.begin = begin; }
+                //~ if (end > 0) { query.end = end; }
+            //~ }
+            //~ return OctoPrint.getWithQuery(totalsUrl(), query, opts);
+        //~ },
+    //~ };
 
     self.database = {
         test(config, opts) {

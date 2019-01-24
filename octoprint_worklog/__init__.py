@@ -10,6 +10,7 @@ import octoprint.printer.profile
 
 from octoprint.settings import settings, valid_boolean_trues
 from octoprint.events import Events
+from octoprint.util import dict_merge
 from octoprint.util.version import is_octoprint_compatible
 
 from .api import WorkLogApi
@@ -26,6 +27,7 @@ class WorkLogPlugin(WorkLogApi,
     def __init__(self):
         self._db_path = None
         self._last_state = None
+        self._timer = None
         
         self.client_id = None
         self.work_log = None
@@ -59,22 +61,22 @@ class WorkLogPlugin(WorkLogApi,
         
     ##~~ StartupPlugin mixin
     def on_after_startup(self):
+        self._logger.setLevel("DEBUG")
         printerState = self._printer.get_state_id();
-        self._logger.info("on_after_startup: " + printerState)
+        self._logger.debug("on_after_startup: " + printerState)
         if (printerState != "PRINTING" and printerState != "PAUSED"):
             data = self.work_log.get_active_job()
             if data != None:
-                data["end"] = -1
                 data["status"] = self.work_log.STATUS_FAIL
                 data["notes"] = r"unexpected error"
                 self.work_log.finish_job(data.get("id"), data)
 
     #~ ##~~ ShutdownPlugin mixin
     def on_shutdown(self):
-        self._logger.info("on_shutdown")
+        self._logger.debug("on_shutdown")
         data = self.work_log.get_active_job()
         if data != None:
-            data["end"] = time.time()
+            data["end_time"] = time.time()
             data["status"] = self.work_log.STATUS_FAIL
             data["notes"] = r"server shutdown"
             self.work_log.finish_job(data.get("id"), data)
@@ -96,7 +98,7 @@ class WorkLogPlugin(WorkLogApi,
         )
 
     def on_settings_load(self):
-        self._logger.info("on_settings_load")
+        self._logger.debug("on_settings_load")
         # TODO
         data = octoprint.plugin.SettingsPlugin.on_settings_load(self)
         return data
@@ -121,14 +123,14 @@ class WorkLogPlugin(WorkLogApi,
             state = payload["state_id"]
             if not (self._last_state == "PAUSED" and state == "PRINTING"):
                 self._last_state = state
-                #~ self._logger.info("state: %s" % self._last_state)
+                #~ self._logger.debug("state: %s" % self._last_state)
             return
             
         if (event == Events.PRINT_STARTED
             or event == Events.PRINT_DONE
             or event == Events.PRINT_FAILED):
                     
-            self._logger.info("%s %s" % (event, self._last_state))
+            self._logger.debug("%s %s" % (event, self._last_state))
             #~ self._logger.info("%s" % payload)
             #~ self._logger.info("%s" % (settings().get(["folder", "uploads"]),))
                 
@@ -141,46 +143,57 @@ class WorkLogPlugin(WorkLogApi,
                 }
 
             if event == Events.PRINT_STARTED:
-                self._logger.info("PRINT_STARTED: ")
-                self._logger.info(self._printer.get_current_job())
+                self._logger.debug("PRINT_STARTED: ")
+                self._logger.debug(self._printer.get_current_job())
                 
                 if self._last_state == "PAUSED":
                     data2 = data
                     data["end_time"] = time.time()
                     data2["status"] = self.work_log.STATUS_FAIL
                     data2["notes"] = r"restarted"
-                    self.update_current_job(data)
+                    self.finish_current_job(data)
                     
                 data["start_time"] = time.time()
                 self.work_log.start_job(data)
                 self.on_data_modified("jobs", "update")
-
+                self.start_timer()
+                
             else:
                 data["end_time"] = time.time()
                 if event == Events.PRINT_DONE:
-                    self._logger.info("PRINT_DONE: ")
-                    self._logger.info(self._printer.get_current_job())
+                    self._logger.debug("PRINT_DONE: ")
+                    self._logger.debug(self._printer.get_current_job())
                     data["status"] = self.work_log.STATUS_SUCCESS
                     data["notes"] = ""
                 else:
-                    self._logger.info("PRINT_FAILED: ")
-                    self._logger.info(self._printer.get_current_job())
+                    self._logger.debug("PRINT_FAILED: ")
+                    self._logger.debug(self._printer.get_current_job())
                     data["status"] = self.work_log.STATUS_FAIL
                     data["notes"] = payload["reason"]
                     
-                self.update_current_job(data)
+                self.finish_current_job(data)
     
     #~~ WorkLog Plugin
-    def update_current_job(self, data):
+    def finish_current_job(self, data):
         currentJob = self.work_log.get_active_job()
         if currentJob != None:
             if data["user_name"] is None:
                 data["user_name"] = currentJob["user_name"]
-            self.work_log.finish_job(currentJob.get("id"), data)
+            self.work_log.finish_job(currentJob["id"], data)
             self.on_data_modified("jobs", "update")
+            self.stop_timer()
             
         else:
             self._logger.error("Can not retrieve id for current job. ID = %s" % self.client_id())
+
+    def update_current_job(self, data):
+        currentJob = self.work_log.get_active_job()
+        if currentJob == None:
+            return
+
+        full_data = dict_merge(currentJob, data)
+        self.work_log.update_job(currentJob["id"], full_data)
+        self.on_data_modified("jobs", "update")
 
     def on_data_modified(self, table, action):
         if action.lower() == "update":
@@ -192,6 +205,25 @@ class WorkLogPlugin(WorkLogApi,
     def get_current_printer(self):
         current = self._printer_profile_manager.get_current()
         return current["name"] if current != None else None
+
+    def start_timer(self):
+        if self._timer is not None:
+            return
+
+        self._logger.debug("Starting timer for print time updates")
+        from octoprint.util import RepeatedTimer
+        self._timer = RepeatedTimer(60, self._timer_task, run_first=False)
+        self._timer.start()
+        
+    def stop_timer(self):
+        if self._timer is None:
+            return
+        self._timer.cancel()
+        self._logger.debug("Timer stopped")
+
+    def _timer_task(self):
+        data = { "end_time": time.time() }
+        self.update_current_job(data)
 
     #~~ Softwareupdate hook
     def get_update_information(self):

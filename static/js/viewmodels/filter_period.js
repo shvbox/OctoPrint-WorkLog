@@ -47,10 +47,10 @@ WorkLog.prototype.viewModels.periodFilter = function periodFilterViewModel() {
         }
 
         self.selected(self.preSelected());
-        
-        console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
+
+        // console.log('periodFilterChanged: ' + self.begin + ' - ' + self.end);
     };
-    
+
     self.test = function testDataValue(value) {
         return self.selected() === undefined
             || (self.begin < 0 || (value >= self.begin && value < self.end));

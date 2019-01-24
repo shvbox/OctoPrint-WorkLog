@@ -105,11 +105,11 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     };
 
     self.jobStatusTitle = function getJobStatusTitle(item) {
-        return !item || item.notes || item.status == -1 ? '' : gettext('Double-click to toggle');
+        return !item || item.notes || item.status === -1 ? '' : gettext('Double-click to toggle');
     };
 
     self.jobStatusToggle = function processJobStatusDoubleClick(item) {
-        if (!item || item.notes || item.status == -1) return;
+        if (!item || item.notes || item.status === -1) return;
         const itemCopy = item;
         itemCopy.status = item.status === 0 ? 1 : 0;
         self.updateJob(itemCopy);
