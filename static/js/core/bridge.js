@@ -16,6 +16,7 @@ WorkLog.prototype.core.bridge = function pluginBridge() {
 
         BINDINGS: [
             '#tab_plugin_worklog',
+            '#settings_plugin_worklog',
         ],
 
         viewModel: function WorkLogViewModel(viewModels) {

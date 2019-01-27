@@ -1,3 +1,5 @@
+/worklog_upgrade.sh~
+/worklog_upgrade.sh
 /worklog.db
 /node_modules/*
 *.pyc

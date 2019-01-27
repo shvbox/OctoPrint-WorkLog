@@ -25,31 +25,19 @@ class WorkLogPlugin(WorkLogApi,
                     octoprint.plugin.EventHandlerPlugin):
                         
     def __init__(self):
-        self._db_path = None
         self._last_state = None
         self._timer = None
         
-        self.client_id = None
         self.work_log = None
                
     def initialize(self):
-        def get_client_id():
-            client_id = self._settings.get(["database", "clientID"])
-            if client_id is None:
-                from uuid import uuid1
-                client_id = str(uuid1())
-                self._settings.set(["database", "clientID"], client_id)
-            return client_id
-
-        self.client_id = get_client_id()
-
         db_config = self._settings.get(["database"], merged=True)
 
         if db_config["useExternal"] not in valid_boolean_trues:
             # set uri for internal sqlite database
             db_path = os.path.join(self.get_plugin_data_folder(), "worklog.db")
             db_config["uri"] = "sqlite:///" + db_path
-            db_config["clientId"] = self.client_id
+            db_config["clientID"] = self.get_client_id()
         
         try:
             # initialize database
@@ -62,6 +50,16 @@ class WorkLogPlugin(WorkLogApi,
     ##~~ StartupPlugin mixin
     def on_after_startup(self):
         self._logger.setLevel("DEBUG")
+        # subscribe to the notify channel so that we get notified if another client has altered the data
+        # notify is not available if we are connected to the internal sqlite database
+        if self.work_log is not None and self.work_log.notify is not None:
+            def notify(pid, channel, payload):
+                # ignore notifications triggered by our own connection
+                if pid != self.work_log.conn.connection.get_backend_pid():
+                    self.on_data_modified(channel, payload)
+            self.work_log.notify.subscribe(notify)
+
+        # sanitize database
         printerState = self._printer.get_state_id();
         self._logger.debug("on_after_startup: " + printerState)
         if (printerState != "PRINTING" and printerState != "PAUSED"):
@@ -71,24 +69,28 @@ class WorkLogPlugin(WorkLogApi,
                 data["notes"] = r"unexpected error"
                 self.work_log.finish_job(data.get("id"), data)
 
-    #~ ##~~ ShutdownPlugin mixin
+    ##~~ ShutdownPlugin mixin
     def on_shutdown(self):
         self._logger.debug("on_shutdown")
-        data = self.work_log.get_active_job()
-        if data != None:
-            data["end_time"] = time.time()
-            data["status"] = self.work_log.STATUS_FAIL
-            data["notes"] = r"server shutdown"
-            self.work_log.finish_job(data.get("id"), data)
-        
+        if self.work_log is not None:
+            data = self.work_log.get_active_job()
+            if data != None:
+                data["end_time"] = time.time()
+                data["status"] = self.work_log.STATUS_FAIL
+                data["notes"] = r"server shutdown"
+                self.work_log.finish_job(data.get("id"), data)
+                
+            self.filamentManager.close()
+       
     ##~~ SettingsPlugin mixin
     def get_settings_version(self):
         return 1
 
     def get_settings_defaults(self):
+        self._logger.debug("get_settings_defaults")
         return dict(
             database=dict(
-                useExternal=False,
+                useExternal=True,
                 uri="postgresql://",
                 name="",
                 user="",
@@ -112,10 +114,11 @@ class WorkLogPlugin(WorkLogApi,
         )
         
     ##~~ TemplatePlugin mixin
-    def get_template_configs(self):
-        return [
-            dict(type="settings", custom_bindings=True)
-        ]
+    #~ def get_template_configs(self):
+        #~ return [
+            #~ dict(type="tab", template="worklog_tab.jinja2"),
+            #~ dict(type="settings", template="worklog_settings.jinja2"),
+        #~ ]
         
     #~~ EventPlugin mixin
     def on_event(self, event, payload):
@@ -174,6 +177,15 @@ class WorkLogPlugin(WorkLogApi,
                 self.finish_current_job(data)
     
     #~~ WorkLog Plugin
+    def get_client_id(self):
+        client_id = self._settings.get(["database", "clientID"])
+        if client_id is None:
+            from uuid import uuid4
+            client_id = str(uuid4())
+            self._settings.set(["database", "clientID"], client_id)
+            self._settings.save()
+        return client_id
+    
     def finish_current_job(self, data):
         currentJob = self.work_log.get_active_job()
         if currentJob != None:
@@ -184,7 +196,7 @@ class WorkLogPlugin(WorkLogApi,
             self.stop_timer()
             
         else:
-            self._logger.error("Can not retrieve id for current job. ID = %s" % self.client_id())
+            self._logger.error("Can't retrieve id for current job. ID = %s" % self.get_client_id())
 
     def update_current_job(self, data):
         currentJob = self.work_log.get_active_job()
@@ -210,9 +222,9 @@ class WorkLogPlugin(WorkLogApi,
         if self._timer is not None:
             return
 
-        self._logger.debug("Starting timer for print time updates")
+        self._logger.debug("Starting _timer for print time updates")
         from octoprint.util import RepeatedTimer
-        self._timer = RepeatedTimer(60, self._timer_task, run_first=False)
+        self._timer = RepeatedTimer(10, self._timer_task, run_first=False)
         self._timer.start()
         
     def stop_timer(self):

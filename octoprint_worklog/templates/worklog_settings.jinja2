@@ -1,47 +1,46 @@
-<div id="settings_plugin_worklog_database">
-    <!-- database connection -->
-    <form class="form-horizontal">
-        <!-- use external database -->
-        <div class="control-group">
-            <div class="controls">
-                <label class="checkbox">
-                    <input type="checkbox" data-bind="checked: viewModels.config.config.database.useExternal">{{ _("Use external database") }}
-                </label>
-            </div>
+<!-- database connection -->
+<h3>{{ _('Database') }}</h3>
+<form class="form-horizontal">
+    <!-- use external database -->
+    <div class="control-group">
+        <div class="controls">
+            <label class="checkbox">
+                <input type="checkbox" data-bind="checked: viewModels.config.config.database.useExternal">{{ _("Use external database") }}
+            </label>
         </div>
-        <!-- uri -->
-        <div class="control-group">
-            <label class="control-label">{{ _('URI') }}</label>
-            <div class="controls">
-                <input type="text" class="input-block-level" data-bind="value: viewModels.config.config.database.uri, enable: viewModels.config.config.database.useExternal">
-            </div>
+    </div>
+    <!-- uri -->
+    <div class="control-group">
+        <label class="control-label">{{ _('URI') }}</label>
+        <div class="controls">
+            <input type="text" class="input-block-level" data-bind="value: viewModels.config.config.database.uri, enable: viewModels.config.config.database.useExternal">
         </div>
-        <!-- database -->
-        <div class="control-group">
-            <label class="control-label">{{ _('Database') }}</label>
-            <div class="controls">
-                <input type="text" class="input-block-level" data-bind="value: viewModels.config.config.database.name, enable: viewModels.config.config.database.useExternal">
-            </div>
+    </div>
+    <!-- database -->
+    <div class="control-group">
+        <label class="control-label">{{ _('Database') }}</label>
+        <div class="controls">
+            <input type="text" class="input-block-level" data-bind="value: viewModels.config.config.database.name, enable: viewModels.config.config.database.useExternal">
         </div>
-        <!-- username -->
-        <div class="control-group">
-            <label class="control-label">{{ _('Username') }}</label>
-            <div class="controls">
-                <input type="text" class="input-block-level" data-bind="value: viewModels.config.config.database.user, enable: viewModels.config.config.database.useExternal">
-            </div>
+    </div>
+    <!-- username -->
+    <div class="control-group">
+        <label class="control-label">{{ _('Username') }}</label>
+        <div class="controls">
+            <input type="text" class="input-block-level" data-bind="value: viewModels.config.config.database.user, enable: viewModels.config.config.database.useExternal">
         </div>
-        <!-- password -->
-        <div class="control-group">
-            <label class="control-label">{{ _('Password') }}</label>
-            <div class="controls">
-                <input type="password" class="input-block-level" data-bind="value: viewModels.config.config.database.password, enable: viewModels.config.config.database.useExternal">
-            </div>
+    </div>
+    <!-- password -->
+    <div class="control-group">
+        <label class="control-label">{{ _('Password') }}</label>
+        <div class="controls">
+            <input type="password" class="input-block-level" data-bind="value: viewModels.config.config.database.password, enable: viewModels.config.config.database.useExternal">
         </div>
-        <!-- connection test -->
-        <div class="control-group">
-            <button class="btn pull-right" data-bind="click: viewModels.config.connectionTest">{{ _("Test connection") }}</button>
-        </div>
+    </div>
+    <!-- connection test -->
+    <div class="control-group">
+        <button class="btn pull-right" data-bind="click: viewModels.config.connectionTest">{{ _("Test connection") }}</button>
+    </div>
 
-        <span>{{ _("Note: If you change these settings you must restart your OctoPrint instance for the changes to take affect.") }}</span>
-    </form>
-</div>
+    <span>{{ _("Note: If you change these settings you must restart your OctoPrint instance for the changes to take affect.") }}</span>
+</form>

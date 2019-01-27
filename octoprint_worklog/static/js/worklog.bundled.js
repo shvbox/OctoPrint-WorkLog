@@ -124,7 +124,7 @@ WorkLog.prototype.core.bridge = function pluginBridge() {
 
         REQUIRED_VIEWMODELS: ['settingsViewModel', 'printerStateViewModel', 'loginStateViewModel', 'filesViewModel', 'connectionViewModel'],
 
-        BINDINGS: ['#tab_plugin_worklog'],
+        BINDINGS: ['#tab_plugin_worklog', '#settings_plugin_worklog'],
 
         viewModel: function WorkLogViewModel(viewModels) {
             self.core.bridge.allViewModels = _.object(self.core.bridge.REQUIRED_VIEWMODELS, viewModels);
@@ -149,18 +149,22 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
     // self.viewModels.warning.replaceFilamentView();
     // };
 
-    // self.onBeforeBinding = function onBeforeBindingCallback() {
-    // self.viewModels.config.loadData();
-    // self.viewModels.selections.setArraySize();
-    // self.viewModels.selections.setSubscriptions();
-    // self.viewModels.warning.setSubscriptions();
-    // };
+    self.onBeforeBinding = function onBeforeBindingCallback() {
+        self.viewModels.config.loadData();
+        // self.viewModels.selections.setArraySize();
+        // self.viewModels.selections.setSubscriptions();
+        // self.viewModels.warning.setSubscriptions();
+    };
 
     self.onStartupComplete = function onStartupCompleteCallback() {
         var requests = [self.viewModels.userFilter.requestUsers, self.viewModels.printerFilter.requestPrinters, self.viewModels.jobs.requestFiles, self.viewModels.jobs.requestJobs];
 
         // We chain them because, e.g. selections depends on spools
         Utils.runRequestChain(requests);
+    };
+
+    self.onSettingsBeforeSave = function onSettingsBeforeSaveCallback() {
+        self.viewModels.config.saveData();
     };
 
     self.onDataUpdaterPluginMessage = function onDataUpdaterPluginMessageCallback(plugin, data) {
@@ -297,6 +301,71 @@ WorkLog.prototype.core.client = function apiClient() {
             var data = { config: config };
             return OctoPrint.postJson(url, data, opts);
         }
+    };
+};
+/* global WorkLog ko $ */
+
+WorkLog.prototype.viewModels.config = function configurationViewModel() {
+    var self = this.viewModels.config;
+    var api = this.core.client;
+    var settingsViewModel = this.core.bridge.allViewModels.settingsViewModel;
+
+    //~ const dialog = $('#settings_plugin_worklog_configurationdialog');
+    //~ 
+    //~ self.showDialog = function showConfigurationDialog() {
+    //~ self.loadData();
+    //~ dialog.modal('show');
+    //~ };
+    //~ 
+    //~ self.hideDialog = function hideConfigurationDialog() {
+    //~ dialog.modal('hide');
+    //~ };
+
+    self.config = ko.mapping.fromJS({});
+
+    self.saveData = function savePluginConfiguration() {
+        //~ console.log(settingsViewModel.settings.plugins.worklog);
+        settingsViewModel.settings.plugins.worklog = ko.mapping.toJS(self.config);
+        //~ console.log(ko.fromJS((ko.mapping.toJS(self.config))));
+        //~ const data = {
+        //~ plugins: {
+        //~ worklog: ko.mapping.toJS(self.config),
+        //~ },
+        //~ };
+        //~ 
+        //~ OctoPrint.settings.save(data);
+        //~ settingsViewModel.saveData(data, {
+        //~ success() { },
+        //~ complete() { },
+        //~ sending: true,
+        //~ });
+    };
+
+    self.loadData = function mapPluginConfigurationToObservables() {
+        var pluginSettings = settingsViewModel.settings.plugins.worklog;
+        ko.mapping.fromJS(ko.toJS(pluginSettings), self.config);
+        console.log(self.config.database.useExternal());
+        console.log(self.config.database.uri());
+        console.log(self.config.database.user());
+    };
+
+    self.connectionTest = function runExternalDatabaseConnectionTest(viewModel, event) {
+        console.log('connectionTest');
+        var target = $(event.target);
+        target.removeClass('btn-success btn-danger');
+        target.prepend('<i class="fa fa-spinner fa-spin"></i> ');
+        target.prop('disabled', true);
+
+        var data = ko.mapping.toJS(self.config.database);
+
+        api.database.test(data).done(function () {
+            target.addClass('btn-success');
+        }).fail(function () {
+            target.addClass('btn-danger');
+        }).always(function () {
+            $('i.fa-spinner', target).remove();
+            target.prop('disabled', false);
+        });
     };
 };
 /* global WorkLog ko gettext */

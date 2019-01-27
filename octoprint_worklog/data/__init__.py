@@ -13,27 +13,25 @@ from uritools import urisplit
 from sqlalchemy.engine.url import URL
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.schema import MetaData, Table, Column, DDL, PrimaryKeyConstraint
-from sqlalchemy.sql import insert, update, delete, select, label, case
+from sqlalchemy.sql import insert, update, delete, select, label, case, func
 from sqlalchemy.types import Integer, String, TIMESTAMP
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 import sqlalchemy.sql.functions as func
 
-#~ from .listen import PGNotify
+from .dialect import Dialect
+from .listen import PGNotify
 
 class WorkLog(object):
 
     DB_VERSION = 1
 
-    DIALECT_SQLITE = "sqlite"
-    DIALECT_POSTGRESQL = "postgresql"
-    
     STATUS_UNDEFINED = -1
     STATUS_FAIL = 0
     STATUS_SUCCESS = 1
     
     def __init__(self, config, logger):
         self._db_path = config["uri"].replace("sqlite:///", "")
-        self._client_id = config["clientId"]
+        self._client_id = config["clientID"]
         self._logger = logger
         self._current_job_id = None
 
@@ -44,31 +42,35 @@ class WorkLog(object):
                         password=config.get("password", ""))
         self.lock = Lock()
 
-        #~ if self.engine_dialect_is(self.DIALECT_SQLITE):
+        #~ if self.engine_dialect_is(Dialect.sqlite):
             # Enable foreign key constraints
             #~ self.conn.execute(text("PRAGMA foreign_keys = ON").execution_options(autocommit=True))
-        #~ elif self.engine_dialect_is(self.DIALECT_POSTGRESQL):
+        #~ el
+        if self.engine_dialect_is(Dialect.postgresql):
             # Create listener thread
-            #~ self.notify = PGNotify(self.conn.engine.url)
+            self.notify = PGNotify(self.conn.engine.url)
 
     def connect(self, uri, database="", username="", password=""):
         uri_parts = urisplit(uri)
 
-        if uri_parts.scheme == self.DIALECT_SQLITE:
+        if uri_parts.scheme == Dialect.sqlite:
             engine = create_engine(uri, connect_args={"check_same_thread": False})
-        #~ elif uri_parts.scheme == self.DIALECT_POSTGRESQL:
-            #~ uri = URL(drivername=uri_parts.scheme,
-                      #~ host=uri_parts.host,
-                      #~ port=uri_parts.getport(default=5432),
-                      #~ database=database,
-                      #~ username=username,
-                      #~ password=password)
-            #~ engine = create_engine(uri)
+        elif uri_parts.scheme == Dialect.postgresql:
+            uri = URL(drivername=uri_parts.scheme,
+                      host=uri_parts.host,
+                      port=uri_parts.getport(default=5432),
+                      database=database,
+                      username=username,
+                      password=password)
+            engine = create_engine(uri)
         else:
             raise ValueError("Engine '{engine}' not supported".format(engine=uri_parts.scheme))
 
         return engine.connect()
- 
+
+    def close(self):
+        self.conn.close()
+
     def engine_dialect_is(self, dialect):
         return self.conn.engine.dialect.name == dialect if self.conn is not None else False
 
@@ -102,7 +104,44 @@ class WorkLog(object):
         self.version = Table("version", metadata,
             Column("id", Integer, primary_key=True, autoincrement=False))
 
-        if self.engine_dialect_is(self.DIALECT_SQLITE):
+        if self.engine_dialect_is(Dialect.postgresql):
+            def should_create_function(name):
+                row = self.conn.execute("select proname from pg_proc where proname = '%s'" % name).scalar()
+                return not bool(row)
+
+            def should_create_trigger(name):
+                row = self.conn.execute("select tgname from pg_trigger where tgname = '%s'" % name).scalar()
+                return not bool(row)
+
+            trigger_function = DDL("""
+                CREATE FUNCTION update_lastmodified()
+                RETURNS TRIGGER AS $func$
+                BEGIN
+                   INSERT INTO modifications (table_name, action, changed_at)
+                   VALUES(TG_TABLE_NAME, TG_OP, CURRENT_TIMESTAMP)
+                   ON CONFLICT (table_name) DO UPDATE
+                   SET action=TG_OP, changed_at=CURRENT_TIMESTAMP
+                   WHERE modifications.table_name=TG_TABLE_NAME;
+                   PERFORM pg_notify(TG_TABLE_NAME, TG_OP);
+                   RETURN NULL;
+                END;
+                $func$ LANGUAGE plpgsql;
+                """)
+
+            if should_create_function("update_lastmodified"):
+                event.listen(metadata, "after_create", trigger_function)
+
+            for table in ["users", "printers"]:
+                for action in ["INSERT", "UPDATE", "DELETE"]:
+                    name = "{table}_on_{action}".format(table=table, action=action.lower())
+                    trigger = DDL("""
+                        CREATE TRIGGER {name} AFTER {action} on {table}
+                        FOR EACH ROW EXECUTE PROCEDURE update_lastmodified()
+                        """.format(name=name, table=table, action=action))
+                    if should_create_trigger(name):
+                        event.listen(metadata, "after_create", trigger)
+
+        elif self.engine_dialect_is(Dialect.sqlite):
             for action in ["INSERT", "UPDATE"]:
                 name = "jobs_on_{action}".format(action=action.lower())
                 trigger = DDL("""\
