@@ -131,34 +131,34 @@ class WorkLog(object):
             if should_create_function("update_lastmodified"):
                 event.listen(metadata, "after_create", update_lastmodified_ddl)
 
-            update_filters_ddl = DDL("""
-                CREATE FUNCTION update_filters()
-                RETURNS TRIGGER AS $func$
-                BEGIN
-                    IF NOT EXISTS (SELECT FROM users WHERE name = NEW.user_name) THEN
-                        INSERT INTO users (name) VALUES (NEW.user_name);
-                        PERFORM pg_notify('users', 'insert');
-                    END IF;
-                    IF NOT EXISTS (SELECT FROM printers WHERE name = NEW.printer_name) THEN
-                        INSERT INTO printers (name) VALUES (NEW.printer_name);
-                        PERFORM pg_notify('printers', 'insert');
-                    END IF;
-                    RETURN NULL;
-                END;
-                $func$ LANGUAGE plpgsql;
-                """)
+            for field in ["user", "printer"]:
+                table = "{field}s".format(field=field)
+                func_name = "update_{table}".format(table=table)
+                func_ddl = DDL("""
+                    CREATE FUNCTION {func_name}()
+                    RETURNS TRIGGER AS $func$
+                    BEGIN
+                        IF (NOT EXISTS (SELECT FROM {table} WHERE name = NEW.{field}_name)) THEN
+                            INSERT INTO {table} (name) VALUES (NEW.{field}_name);
+                            PERFORM pg_notify('{table}', 'insert');
+                        END IF;
+                        RETURN NULL;
+                    END;
+                    $func$ LANGUAGE plpgsql;
+                    """.format(func_name=func_name, table=table, field=field))
 
-            if should_create_function("update_filters"):
-                event.listen(metadata, "after_create", update_filters_ddl)
+                if should_create_function(func_name):
+                    event.listen(metadata, "after_create", func_ddl)
 
-            for action in ["INSERT", "UPDATE"]:
-                name = "jobs_on_{action}".format(action=action.lower())
-                trigger = DDL("""
-                    CREATE TRIGGER {name} AFTER {action} on jobs
-                    FOR EACH ROW EXECUTE PROCEDURE update_filters()
-                    """.format(name=name, action=action))
-                if should_create_trigger(name):
-                    event.listen(metadata, "after_create", trigger)
+                for action in ["INSERT", "UPDATE"]:
+                    trigger_name = "jobs_on_{action}_{table}".format(action=action.lower(), table=table)
+                    trigger_ddl = DDL("""
+                        CREATE TRIGGER {trigger_name} AFTER {action} on jobs
+                        FOR EACH ROW
+                        EXECUTE PROCEDURE {func_name}()
+                        """.format(trigger_name=trigger_name, action=action, func_name=func_name))
+                    if should_create_trigger(trigger_name):
+                        event.listen(metadata, "after_create", trigger_ddl)
 
             for table in ["jobs", "users", "printers"]:
                 for action in ["INSERT", "UPDATE", "DELETE"]:

@@ -81,7 +81,7 @@ class WorkLogPlugin(WorkLogApi,
                 data["notes"] = r"server shutdown"
                 self.work_log.finish_job(data.get("id"), data)
                 
-            self.filamentManager.close()
+            self.work_log.close()
        
     ##~~ SettingsPlugin mixin
     def get_settings_version(self):
@@ -224,7 +224,7 @@ class WorkLogPlugin(WorkLogApi,
 
         self._logger.debug("Starting timer for print time updates")
         from octoprint.util import RepeatedTimer
-        self._timer = RepeatedTimer(10, self._timer_task, run_first=False)
+        self._timer = RepeatedTimer(60, self._timer_task, run_first=False)
         self._timer.start()
         
     def stop_timer(self):
