@@ -113,25 +113,54 @@ class WorkLog(object):
                 row = self.conn.execute("select tgname from pg_trigger where tgname = '%s'" % name).scalar()
                 return not bool(row)
 
-            trigger_function = DDL("""
+            update_lastmodified_ddl = DDL("""
                 CREATE FUNCTION update_lastmodified()
                 RETURNS TRIGGER AS $func$
                 BEGIN
-                   INSERT INTO modifications (table_name, action, changed_at)
-                   VALUES(TG_TABLE_NAME, TG_OP, CURRENT_TIMESTAMP)
-                   ON CONFLICT (table_name) DO UPDATE
-                   SET action=TG_OP, changed_at=CURRENT_TIMESTAMP
-                   WHERE modifications.table_name=TG_TABLE_NAME;
-                   PERFORM pg_notify(TG_TABLE_NAME, TG_OP);
-                   RETURN NULL;
+                    INSERT INTO modifications (table_name, action, changed_at)
+                    VALUES(TG_TABLE_NAME, TG_OP, CURRENT_TIMESTAMP)
+                    ON CONFLICT (table_name) DO UPDATE
+                    SET action=TG_OP, changed_at=CURRENT_TIMESTAMP
+                    WHERE modifications.table_name=TG_TABLE_NAME;
+                    PERFORM pg_notify(TG_TABLE_NAME, TG_OP);
+                    RETURN NULL;
                 END;
                 $func$ LANGUAGE plpgsql;
                 """)
 
             if should_create_function("update_lastmodified"):
-                event.listen(metadata, "after_create", trigger_function)
+                event.listen(metadata, "after_create", update_lastmodified_ddl)
 
-            for table in ["users", "printers"]:
+            update_filters_ddl = DDL("""
+                CREATE FUNCTION update_filters()
+                RETURNS TRIGGER AS $func$
+                BEGIN
+                    IF NOT EXISTS (SELECT FROM users WHERE name = NEW.user_name) THEN
+                        INSERT INTO users (name) VALUES (NEW.user_name);
+                        PERFORM pg_notify('users', 'insert');
+                    END IF;
+                    IF NOT EXISTS (SELECT FROM printers WHERE name = NEW.printer_name) THEN
+                        INSERT INTO printers (name) VALUES (NEW.printer_name);
+                        PERFORM pg_notify('printers', 'insert');
+                    END IF;
+                    RETURN NULL;
+                END;
+                $func$ LANGUAGE plpgsql;
+                """)
+
+            if should_create_function("update_filters"):
+                event.listen(metadata, "after_create", update_filters_ddl)
+
+            for action in ["INSERT", "UPDATE"]:
+                name = "jobs_on_{action}".format(action=action.lower())
+                trigger = DDL("""
+                    CREATE TRIGGER {name} AFTER {action} on jobs
+                    FOR EACH ROW EXECUTE PROCEDURE update_filters()
+                    """.format(name=name, action=action))
+                if should_create_trigger(name):
+                    event.listen(metadata, "after_create", trigger)
+
+            for table in ["jobs", "users", "printers"]:
                 for action in ["INSERT", "UPDATE", "DELETE"]:
                     name = "{table}_on_{action}".format(table=table, action=action.lower())
                     trigger = DDL("""
@@ -149,7 +178,8 @@ class WorkLog(object):
                     FOR EACH ROW BEGIN
                         INSERT OR IGNORE INTO users (name) VALUES (new.user_name);
                         INSERT OR IGNORE INTO printers (name) VALUES (new.printer_name);
-                        INSERT OR REPLACE INTO modifications (table_name, action) VALUES ('jobs','{action}');
+                        DELETE FROM modifications WHERE table_name='jobs';
+                        INSERT INTO modifications (table_name, action) VALUES ('jobs','{action}');
                     END;
                     """.format(name=name, action=action))
                 event.listen(metadata, "after_create", trigger)

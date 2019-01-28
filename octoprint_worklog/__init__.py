@@ -54,6 +54,7 @@ class WorkLogPlugin(WorkLogApi,
         # notify is not available if we are connected to the internal sqlite database
         if self.work_log is not None and self.work_log.notify is not None:
             def notify(pid, channel, payload):
+                self._logger.debug("notify: " + channel)
                 # ignore notifications triggered by our own connection
                 if pid != self.work_log.conn.connection.get_backend_pid():
                     self.on_data_modified(channel, payload)
@@ -90,7 +91,7 @@ class WorkLogPlugin(WorkLogApi,
         self._logger.debug("get_settings_defaults")
         return dict(
             database=dict(
-                useExternal=True,
+                useExternal=False,
                 uri="postgresql://",
                 name="",
                 user="",
@@ -158,7 +159,7 @@ class WorkLogPlugin(WorkLogApi,
                     
                 data["start_time"] = time.time()
                 self.work_log.start_job(data)
-                self.on_data_modified("jobs", "update")
+                self.on_data_modified("jobs", "insert")
                 self.start_timer()
                 
             else:
@@ -208,8 +209,7 @@ class WorkLogPlugin(WorkLogApi,
         self.on_data_modified("jobs", "update")
 
     def on_data_modified(self, table, action):
-        if action.lower() == "update":
-            self.send_client_message("data_changed", data=dict(table=table, action=action))
+        self.send_client_message("data_changed", data=dict(table=table, action=action))
     
     def send_client_message(self, message_type, data=None):
         self._plugin_manager.send_plugin_message(self._identifier, dict(type=message_type, data=data))
@@ -222,7 +222,7 @@ class WorkLogPlugin(WorkLogApi,
         if self._timer is not None:
             return
 
-        self._logger.debug("Starting _timer for print time updates")
+        self._logger.debug("Starting timer for print time updates")
         from octoprint.util import RepeatedTimer
         self._timer = RepeatedTimer(10, self._timer_task, run_first=False)
         self._timer.start()
