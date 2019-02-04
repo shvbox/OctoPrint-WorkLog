@@ -7,11 +7,11 @@ WorkLog.prototype.viewModels.config = function configurationViewModel() {
 
     self.config = ko.mapping.fromJS({});
 
-    self.saveData = function savePluginConfiguration() {
+    self.saveData = () => {
         settingsViewModel.settings.plugins.worklog = ko.mapping.toJS(self.config);
     };
 
-    self.loadData = function mapPluginConfigurationToObservables() {
+    self.loadData = () => {
         const pluginSettings = settingsViewModel.settings.plugins.worklog;
         ko.mapping.fromJS(ko.toJS(pluginSettings), self.config);
         console.log(self.config.database.useExternal());
@@ -19,7 +19,7 @@ WorkLog.prototype.viewModels.config = function configurationViewModel() {
         console.log(self.config.database.user());
     };
 
-    self.connectionTest = function runExternalDatabaseConnectionTest(viewModel, event) {
+    self.connectionTest = (viewModel, event) => {
         console.log('connectionTest');
         const target = $(event.target);
         target.removeClass('btn-success btn-danger');

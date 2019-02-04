@@ -51,14 +51,9 @@ class WorkLogPlugin(WorkLogApi,
     def on_after_startup(self):
         self._logger.setLevel("DEBUG")
         # subscribe to the notify channel so that we get notified if another client has altered the data
-        # notify is not available if we are connected to the internal sqlite database
-        if self.work_log is not None and self.work_log.notify is not None:
-            def notify(pid, channel, payload):
-                self._logger.debug("notify: " + channel)
-                # ignore notifications triggered by our own connection
-                if pid != self.work_log.conn.connection.get_backend_pid():
-                    self.on_data_modified(channel, payload)
-            self.work_log.notify.subscribe(notify)
+        # notifier is not available if we are connected to the internal sqlite database
+        if self.work_log is not None and self.work_log.notifier is not None:
+            self.work_log.notifier.subscribe(self.process_notification)
 
         # sanitize database
         printerState = self._printer.get_state_id();
@@ -66,7 +61,7 @@ class WorkLogPlugin(WorkLogApi,
         if (printerState != "PRINTING" and printerState != "PAUSED"):
             data = self.work_log.get_active_job()
             if data != None:
-                data["status"] = self.work_log.STATUS_FAIL
+                data["status"] = self.work_log.STATUS_FAIL_SYS
                 data["notes"] = r"unexpected error"
                 self.work_log.finish_job(data.get("id"), data)
 
@@ -77,9 +72,12 @@ class WorkLogPlugin(WorkLogApi,
             data = self.work_log.get_active_job()
             if data != None:
                 data["end_time"] = time.time()
-                data["status"] = self.work_log.STATUS_FAIL
+                data["status"] = self.work_log.STATUS_FAIL_SYS
                 data["notes"] = r"server shutdown"
                 self.work_log.finish_job(data.get("id"), data)
+
+            if self.work_log.notifier is not None:
+                self.work_log.notifier.unsubscribe(self.process_notification)
                 
             self.work_log.close()
        
@@ -153,7 +151,7 @@ class WorkLogPlugin(WorkLogApi,
                 if self._last_state == "PAUSED":
                     data2 = data
                     data["end_time"] = time.time()
-                    data2["status"] = self.work_log.STATUS_FAIL
+                    data2["status"] = self.work_log.STATUS_FAIL_SYS
                     data2["notes"] = r"restarted"
                     self.finish_current_job(data)
                     
@@ -172,7 +170,7 @@ class WorkLogPlugin(WorkLogApi,
                 else:
                     self._logger.debug("PRINT_FAILED: ")
                     self._logger.debug(self._printer.get_current_job())
-                    data["status"] = self.work_log.STATUS_FAIL
+                    data["status"] = self.work_log.STATUS_FAIL_SYS
                     data["notes"] = payload["reason"]
                     
                 self.finish_current_job(data)
@@ -224,18 +222,25 @@ class WorkLogPlugin(WorkLogApi,
 
         self._logger.debug("Starting timer for print time updates")
         from octoprint.util import RepeatedTimer
-        self._timer = RepeatedTimer(60, self._timer_task, run_first=False)
+        self._timer = RepeatedTimer(60, self.timer_task, run_first=False)
         self._timer.start()
         
     def stop_timer(self):
         if self._timer is None:
             return
         self._timer.cancel()
+        self._timer = None
         self._logger.debug("Timer stopped")
 
-    def _timer_task(self):
+    def timer_task(self):
         data = { "end_time": time.time() }
         self.update_current_job(data)
+
+    def process_notification(self, pid, channel, payload):
+        self._logger.debug("notify: {pid} - {ch} : {pl}".format(pid=pid, ch=channel, pl=payload))
+        # ignore notifications triggered by our own connection
+        if pid != self.work_log.conn.connection.get_backend_pid():
+            self.on_data_modified(channel, payload)
 
     #~~ Softwareupdate hook
     def get_update_information(self):

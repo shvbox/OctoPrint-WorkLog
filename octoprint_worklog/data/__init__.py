@@ -25,8 +25,9 @@ class WorkLog(object):
 
     DB_VERSION = 1
 
-    STATUS_UNDEFINED = -1
-    STATUS_FAIL = 0
+    STATUS_FAIL_USER = -2
+    STATUS_FAIL_SYS = -1
+    STATUS_UNDEFINED = 0
     STATUS_SUCCESS = 1
     
     def __init__(self, config, logger):
@@ -35,7 +36,7 @@ class WorkLog(object):
         self._logger = logger
         self._current_job_id = None
 
-        self.notify = None
+        self.notifier = None
         self.conn = self.connect(config.get("uri", ""),
                         database=config.get("name", ""),
                         username=config.get("user", ""),
@@ -48,7 +49,7 @@ class WorkLog(object):
         #~ el
         if self.engine_dialect_is(Dialect.postgresql):
             # Create listener thread
-            self.notify = PGNotify(self.conn.engine.url)
+            self.notifier = PGNotify(self.conn.engine.url)
 
     def connect(self, uri, database="", username="", password=""):
         uri_parts = urisplit(uri)
@@ -85,9 +86,10 @@ class WorkLog(object):
             Column("file", String(255), index=True),
             Column("origin", String(15), nullable=False, index=True),
             Column("file_path", String(255), nullable=False),
-            Column("start_time", Integer, nullable=False, server_default=text("-1")),
-            Column("end_time", Integer, nullable=False, server_default=text("-1")),
-            Column("status", Integer, nullable=False, server_default=text("-1")),
+            Column("start_time", Integer, nullable=False, server_default=text("0")),
+            Column("end_time", Integer, nullable=False, server_default=text("0")),
+            Column("status", Integer, nullable=False, server_default=text("0")),
+            Column("tag", String(63), nullable=False, server_default=""),
             Column("notes", String(255), nullable=False, server_default=""))
 
         self.modifications = Table("modifications", metadata,

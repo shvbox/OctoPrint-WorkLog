@@ -27,9 +27,9 @@ class PGNotify(object):
             if wait_ready([conn.connection], [], [], 5) != ([], [], []):
                 conn.connection.poll()
                 while conn.connection.notifies:
-                    notify = conn.connection.notifies.pop()
+                    note = conn.connection.notifies.pop()
                     for func in self.subscriber:
-                        func(pid=notify.pid, channel=notify.channel, payload=notify.payload)
+                        func(pid=note.pid, channel=note.channel, payload=note.payload)
 
     def subscribe(self, func):
         self.subscriber.append(func)

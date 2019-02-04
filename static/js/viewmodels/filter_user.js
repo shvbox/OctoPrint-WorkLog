@@ -1,4 +1,4 @@
-/* global WorkLog ko */
+/* global WorkLog ko _ gettext */
 
 WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
     const self = this.viewModels.userFilter;
@@ -6,30 +6,46 @@ WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
 
     const loginLib = this.core.bridge.allViewModels.loginStateViewModel;
 
+    const THIS = gettext('This');
+
+    self.activeUser = undefined;
+    loginLib.currentUser.subscribe(() => {
+        const user = loginLib.currentUser();
+        self.activeUser = user ? user.name : undefined;
+    });
+
     self.allItems = ko.observableArray([]);
     self.selected = ko.observable(undefined);
+    self.value = ko.observable(undefined);
+
     self.requestInProgress = ko.observable(false);
 
-    self.userChanged = false;
-    loginLib.currentUser.subscribe(() => { self.userChanged = true; });
-
-    self.test = function testDataValue(value) {
-        return self.selected() === undefined || value === self.selected();
+    self.changed = () => {
+        if (self.selected() === THIS) {
+            self.selected(self.activeUser);
+        }
+        self.value(self.selected());
     };
 
-    self.processUsers = function processRequestedUsers(data) {
+    self.test = value => self.selected() === undefined || value === self.value();
+
+    self.processUsers = (data) => {
         let { users } = data;
-        if (users === undefined) users = [];
+        if (users === undefined) {
+            users = [];
+        } else if (self.activeUser) {
+            const userInList = _.find(users, entry => entry.name === self.activeUser);
+            if (userInList) {
+                users = [{ name: THIS }, ...users];
+            }
+        }
         self.allItems(users);
 
-        if (self.userChanged) {
-            const user = loginLib.currentUser();
-            self.selected(user ? user.name : undefined);
-            self.userChanged = false;
-        }
+        self.selected(self.activeUser);
+        self.changed();
     };
 
-    self.requestUsers = function requestAllUsersFromBackend(force) {
+    self.requestUsers = (force) => {
         self.requestInProgress(true);
         return api.user.list(force)
             .done((response) => { self.processUsers(response); })

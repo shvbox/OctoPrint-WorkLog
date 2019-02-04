@@ -20,9 +20,9 @@ WorkLog.prototype.core.client = function apiClient() {
         return (printer === undefined) ? url : `${url}/${printer}`;
     };
 
-    const totalsUrl = function apiTotalsNamespace() {
-        return `${pluginUrl}/totals`;
-    };
+    //~ const totalsUrl = function apiTotalsNamespace() {
+        //~ return `${pluginUrl}/totals`;
+    //~ };
 
     self.job = {
         list(force = false, opts) {

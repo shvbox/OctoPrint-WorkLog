@@ -7,6 +7,7 @@
  */
 
 const WorkLog = function WorkLog() {
+    this.core.common.call(this);
     this.core.client.call(this);
     return this.core.bridge.call(this);
 };

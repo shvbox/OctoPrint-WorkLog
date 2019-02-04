@@ -1,4 +1,4 @@
-/* global WorkLog ko _ */
+/* global WorkLog ko _ gettext */
 
 WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
     const self = this.viewModels.printerFilter;
@@ -6,32 +6,46 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
 
     const connLib = this.core.bridge.allViewModels.connectionViewModel;
 
+    const THIS = gettext('This');
+
+    self.activePrinter = undefined;
+    connLib.selectedPrinter.subscribe(() => {
+        const profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
+        self.activePrinter = profile ? profile.name : undefined;
+    });
+
     self.allItems = ko.observableArray([]);
-    self.selected = ko.observable();
+    self.selected = ko.observable(undefined);
+    self.value = ko.observable(undefined);
 
     self.requestInProgress = ko.observable(false);
 
-    self.printerChanged = false;
-    connLib.selectedPrinter.subscribe(() => { self.printerChanged = true; });
-
-    self.test = function testDataValue(value) {
-        return self.selected() === undefined || value === self.selected();
+    self.changed = () => {
+        if (self.selected() === THIS) {
+            self.selected(self.activePrinter);
+        }
+        self.value(self.selected());
     };
 
-    self.processPrinters = function processRequestedPrinters(data) {
+    self.test = value => self.value() === undefined || value === self.value();
+
+    self.processPrinters = (data) => {
         let { printers } = data;
-        if (printers === undefined) printers = [];
+        if (printers === undefined) {
+            printers = [];
+        } else if (self.activePrinter) {
+            const printerInList = _.find(printers, entry => entry.name === self.activePrinter);
+            if (printerInList) {
+                printers = [{ name: THIS }, ...printers];
+            }
+        }
         self.allItems(printers);
 
-        if (self.printerChanged) {
-            const profile = _.findWhere(connLib.printerOptions(), { id: connLib.selectedPrinter() });
-            self.selected(profile ? profile.name : undefined);
-
-            self.printerChanged = false;
-        }
+        self.selected(self.activePrinter);
+        self.changed();
     };
 
-    self.requestPrinters = function requestAllPrintersFromBackend(force) {
+    self.requestPrinters = (force) => {
         self.requestInProgress(true);
         return api.printer.list(force)
             .done((response) => { self.processPrinters(response); })

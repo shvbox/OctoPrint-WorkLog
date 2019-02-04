@@ -4,7 +4,7 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
     const self = this;
 
     // self.onStartup = function onStartupCallback() {
-        // self.viewModels.warning.replaceFilamentView();
+    //     self.viewModels.warning.replaceFilamentView();
     // };
 
     self.onBeforeBinding = function onBeforeBindingCallback() {
@@ -25,10 +25,10 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
         // We chain them because, e.g. selections depends on spools
         Utils.runRequestChain(requests);
     };
-    
+
     self.onSettingsBeforeSave = function onSettingsBeforeSaveCallback() {
         self.viewModels.config.saveData();
-    }
+    };
 
     self.onDataUpdaterPluginMessage = function onDataUpdaterPluginMessageCallback(plugin, data) {
         if (plugin !== 'worklog') return;
