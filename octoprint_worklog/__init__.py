@@ -53,7 +53,13 @@ class WorkLogPlugin(WorkLogApi,
         # subscribe to the notify channel so that we get notified if another client has altered the data
         # notifier is not available if we are connected to the internal sqlite database
         if self.work_log is not None and self.work_log.notifier is not None:
-            self.work_log.notifier.subscribe(self.process_notification)
+            def process_notification(pid, channel, payload):
+                # ignore notifications triggered by our own connection
+                if pid != self.work_log.conn.connection.get_backend_pid():
+                    self.on_data_modified(channel, payload)
+                    self._logger.debug("notify: {pid} - {ch} : {pl}".format(pid=pid, ch=channel, pl=payload))
+
+            self.work_log.notifier.subscribe(process_notification)
 
         # sanitize database
         printerState = self._printer.get_state_id();
@@ -76,8 +82,8 @@ class WorkLogPlugin(WorkLogApi,
                 data["notes"] = r"server shutdown"
                 self.work_log.finish_job(data.get("id"), data)
 
-            if self.work_log.notifier is not None:
-                self.work_log.notifier.unsubscribe(self.process_notification)
+            #~ if self.work_log.notifier is not None:
+                #~ self.work_log.notifier.unsubscribe(self.process_notification)
                 
             self.work_log.close()
        
@@ -112,12 +118,13 @@ class WorkLogPlugin(WorkLogApi,
             #~ less=["less/worklog.less"]
         )
         
-    ##~~ TemplatePlugin mixin
-    #~ def get_template_configs(self):
-        #~ return [
-            #~ dict(type="tab", template="worklog_tab.jinja2"),
-            #~ dict(type="settings", template="worklog_settings.jinja2"),
-        #~ ]
+    #~ ##~~ TemplatePlugin mixin
+    def get_template_configs(self):
+        return [
+            dict(type="tab", template="worklog_tab.jinja2"),
+            dict(type="settings", template="worklog_settings.jinja2"),
+            dict(type="generic", template="worklog_job_edit_dialog.jinja2"),
+        ]
         
     #~~ EventPlugin mixin
     def on_event(self, event, payload):
@@ -151,7 +158,7 @@ class WorkLogPlugin(WorkLogApi,
                 if self._last_state == "PAUSED":
                     data2 = data
                     data["end_time"] = time.time()
-                    data2["status"] = self.work_log.STATUS_FAIL_SYS
+                    data2["status"] = self.work_log.STATUS_FAIL_USER
                     data2["notes"] = r"restarted"
                     self.finish_current_job(data)
                     
@@ -170,7 +177,7 @@ class WorkLogPlugin(WorkLogApi,
                 else:
                     self._logger.debug("PRINT_FAILED: ")
                     self._logger.debug(self._printer.get_current_job())
-                    data["status"] = self.work_log.STATUS_FAIL_SYS
+                    data["status"] = self.work_log.STATUS_FAIL_USER
                     data["notes"] = payload["reason"]
                     
                 self.finish_current_job(data)
@@ -187,15 +194,13 @@ class WorkLogPlugin(WorkLogApi,
     
     def finish_current_job(self, data):
         currentJob = self.work_log.get_active_job()
-        if currentJob != None:
-            if data["user_name"] is None:
-                data["user_name"] = currentJob["user_name"]
-            self.work_log.finish_job(currentJob["id"], data)
-            self.on_data_modified("jobs", "update")
-            self.stop_timer()
-            
-        else:
+        if currentJob == None:
             self._logger.error("Can't retrieve id for current job. ID = %s" % self.get_client_id())
+
+        full_data = dict_merge(currentJob, data)
+        self.work_log.finish_job(currentJob["id"], full_data)
+        self.on_data_modified("jobs", "update")
+        self.stop_timer()
 
     def update_current_job(self, data):
         currentJob = self.work_log.get_active_job()
@@ -235,12 +240,6 @@ class WorkLogPlugin(WorkLogApi,
     def timer_task(self):
         data = { "end_time": time.time() }
         self.update_current_job(data)
-
-    def process_notification(self, pid, channel, payload):
-        self._logger.debug("notify: {pid} - {ch} : {pl}".format(pid=pid, ch=channel, pl=payload))
-        # ignore notifications triggered by our own connection
-        if pid != self.work_log.conn.connection.get_backend_pid():
-            self.on_data_modified(channel, payload)
 
     #~~ Softwareupdate hook
     def get_update_information(self):

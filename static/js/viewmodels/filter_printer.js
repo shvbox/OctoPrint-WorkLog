@@ -29,26 +29,35 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
 
     self.test = value => self.value() === undefined || value === self.value();
 
-    self.processPrinters = (data) => {
+    self.processPrinters = (data, opts) => {
+        // console.log(opts);
+        if (opts === 'notmodified') return;
+
+        const firstRun = self.allItems().length === 0;
+        let printerInList = undefined;
         let { printers } = data;
+
         if (printers === undefined) {
             printers = [];
         } else if (self.activePrinter) {
-            const printerInList = _.find(printers, entry => entry.name === self.activePrinter);
+            printerInList = _.find(printers, entry => entry.name === self.activePrinter);
             if (printerInList) {
                 printers = [{ name: THIS }, ...printers];
             }
         }
+
         self.allItems(printers);
 
-        self.selected(self.activePrinter);
-        self.changed();
+        if (firstRun) {
+            self.selected(printerInList ? self.activePrinter : undefined);
+            self.changed();
+        }
     };
 
     self.requestPrinters = (force) => {
         self.requestInProgress(true);
-        return api.printer.list(force)
-            .done((response) => { self.processPrinters(response); })
+        return api.printer.list(force, { ifModified: true })
+            .done((response, opts) => { self.processPrinters(response, opts); })
             .always(() => { self.requestInProgress(false); });
     };
 };

@@ -125,7 +125,7 @@ WorkLog.prototype.core.bridge = function pluginBridge() {
 
         REQUIRED_VIEWMODELS: ['settingsViewModel', 'printerStateViewModel', 'loginStateViewModel', 'filesViewModel', 'connectionViewModel'],
 
-        BINDINGS: ['#tab_plugin_worklog', '#settings_plugin_worklog'],
+        BINDINGS: ['#tab_plugin_worklog', '#settings_plugin_worklog', '#dialog_job_edit_worklog'],
 
         viewModel: function WorkLogViewModel(viewModels) {
             self.core.bridge.allViewModels = _.object(self.core.bridge.REQUIRED_VIEWMODELS, viewModels);
@@ -168,20 +168,21 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
         self.viewModels.config.saveData();
     };
 
-    self.onDataUpdaterPluginMessage = function onDataUpdaterPluginMessageCallback(plugin, data) {
+    self.onDataUpdaterPluginMessage = function onDataUpdaterPluginMessageCallback(plugin, message) {
         if (plugin !== 'worklog') return;
 
-        var msgType = data.type;
-        var msgData = data.data;
+        var type = message.type,
+            data = message.data;
         // TODO needs improvement
-        if (msgType === 'data_changed') {
-            if (msgData.table === 'jobs') {
+
+        if (type === 'data_changed') {
+            if (data.table === 'jobs') {
                 self.viewModels.userFilter.requestUsers();
                 self.viewModels.printerFilter.requestPrinters();
                 self.viewModels.jobs.requestJobs();
-            } else if (msgData.table === 'users') {
+            } else if (data.table === 'users') {
                 self.viewModels.userFilter.requestUsers();
-            } else if (msgData.table === 'printers') {
+            } else if (data.table === 'printers') {
                 self.viewModels.printerFilter.requestPrinters();
             }
         }
@@ -215,19 +216,19 @@ WorkLog.prototype.core.client = function apiClient() {
 
     var pluginUrl = 'plugin/worklog';
 
-    var jobUrl = function apiJobNamespace(job) {
+    var jobUrl = function apiJobNamespace(id) {
         var url = pluginUrl + '/jobs';
-        return job === undefined ? url : url + '/' + job;
+        return id === undefined ? url : url + '/' + id;
     };
 
-    var userUrl = function apiUserNamespace(user) {
+    var userUrl = function apiUserNamespace(name) {
         var url = pluginUrl + '/users';
-        return user === undefined ? url : url + '/' + user;
+        return name === undefined ? url : url + '/' + name;
     };
 
-    var printerUrl = function apiPrinterNamespace(printer) {
+    var printerUrl = function apiPrinterNamespace(name) {
         var url = pluginUrl + '/printers';
-        return printer === undefined ? url : url + '/' + printer;
+        return name === undefined ? url : url + '/' + name;
     };
 
     //~ const totalsUrl = function apiTotalsNamespace() {
@@ -316,8 +317,8 @@ WorkLog.prototype.core.common = function pluginCommonValues() {
     var self = this.core.common;
 
     self.jobStatus = {
-        STATUS_FAIL_USER: -2,
-        STATUS_FAIL_SYS: -1,
+        STATUS_FAIL_SYS: -2,
+        STATUS_FAIL_USER: -1,
         STATUS_UNDEFINED: 0,
         STATUS_SUCCESS: 1
     };
@@ -341,13 +342,13 @@ WorkLog.prototype.viewModels.config = function configurationViewModel() {
     self.loadData = function () {
         var pluginSettings = settingsViewModel.settings.plugins.worklog;
         ko.mapping.fromJS(ko.toJS(pluginSettings), self.config);
-        console.log(self.config.database.useExternal());
-        console.log(self.config.database.uri());
-        console.log(self.config.database.user());
+        // console.log(self.config.database.useExternal());
+        // console.log(self.config.database.uri());
+        // console.log(self.config.database.user());
     };
 
     self.connectionTest = function (viewModel, event) {
-        console.log('connectionTest');
+        // console.log('connectionTest');
         var target = $(event.target);
         target.removeClass('btn-success btn-danger');
         target.prepend('<i class="fa fa-spinner fa-spin"></i> ');
@@ -474,29 +475,38 @@ WorkLog.prototype.viewModels.printerFilter = function printerFilterViewModel() {
         return self.value() === undefined || value === self.value();
     };
 
-    self.processPrinters = function (data) {
+    self.processPrinters = function (data, opts) {
+        // console.log(opts);
+        if (opts === 'notmodified') return;
+
+        var firstRun = self.allItems().length === 0;
+        var printerInList = undefined;
         var printers = data.printers;
+
 
         if (printers === undefined) {
             printers = [];
         } else if (self.activePrinter) {
-            var printerInList = _.find(printers, function (entry) {
+            printerInList = _.find(printers, function (entry) {
                 return entry.name === self.activePrinter;
             });
             if (printerInList) {
                 printers = [{ name: THIS }].concat(_toConsumableArray(printers));
             }
         }
+
         self.allItems(printers);
 
-        self.selected(self.activePrinter);
-        self.changed();
+        if (firstRun) {
+            self.selected(printerInList ? self.activePrinter : undefined);
+            self.changed();
+        }
     };
 
     self.requestPrinters = function (force) {
         self.requestInProgress(true);
-        return api.printer.list(force).done(function (response) {
-            self.processPrinters(response);
+        return api.printer.list(force, { ifModified: true }).done(function (response, opts) {
+            self.processPrinters(response, opts);
         }).always(function () {
             self.requestInProgress(false);
         });
@@ -572,29 +582,38 @@ WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
         return self.selected() === undefined || value === self.value();
     };
 
-    self.processUsers = function (data) {
+    self.processUsers = function (data, opts) {
+        // console.log(opts);
+        if (opts === 'notmodified') return;
+
+        var firstRun = self.allItems().length === 0;
+        //~ let userInList = undefined;
+        var userInList = false;
         var users = data.users;
+
 
         if (users === undefined) {
             users = [];
         } else if (self.activeUser) {
-            var userInList = _.find(users, function (entry) {
-                return entry.name === self.activeUser;
-            });
+            //~ userInList = _.find(users, entry => entry.name === self.activeUser);
+            userInList = _.findWhere(users, { name: self.activeUser }) !== undefined;
             if (userInList) {
                 users = [{ name: THIS }].concat(_toConsumableArray(users));
             }
         }
+
         self.allItems(users);
 
-        self.selected(self.activeUser);
-        self.changed();
+        if (firstRun) {
+            self.selected(userInList ? self.activeUser : undefined);
+            self.changed();
+        }
     };
 
     self.requestUsers = function (force) {
         self.requestInProgress(true);
-        return api.user.list(force).done(function (response) {
-            self.processUsers(response);
+        return api.user.list(force, { ifModified: true }).done(function (response, opts) {
+            self.processUsers(response, opts);
         }).always(function () {
             self.requestInProgress(false);
         });
@@ -618,10 +637,10 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
 
     self.octoprintFiles = undefined;
 
+    self.requestInProgress = ko.observable(true);
+
     self.totalQuantity = ko.observable(undefined);
     self.totalDuration = ko.observable(undefined);
-
-    self.requestInProgress = ko.observable(false);
 
     self.searchQuery = ko.observable(undefined);
     self.searchQuery.subscribe(function () {
@@ -744,13 +763,6 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         self.totalDuration(formatDuration(duration));
     };
 
-    //~ self.jobStatusToggle = function processJobStatusDoubleClick(item) {
-    //~ if (!item || item.notes || item.status === db.STATUS_UNDEFINED || item.status === db.STATUS_FAIL_SYS) return;
-    //~ const itemCopy = item;
-    //~ itemCopy.status = item.status === db.STATUS_FAIL_USER ? db.STATUS_SUCCESS : db.STATUS_FAIL_USER;
-    //~ self.updateJob(itemCopy);
-    //~ };
-
     self.jobStatusText = function (status) {
         switch (status) {// eslint-disable-line default-case
             case db.STATUS_FAIL_SYS:
@@ -764,15 +776,14 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         return '';
     };
 
-    self.jobStatusColor = function (status) {
+    self.jobStatusClass = function (status) {
         switch (status) {// eslint-disable-line default-case
             case db.STATUS_FAIL_SYS:
             case db.STATUS_FAIL_USER:
-                return 'red';
+                return 'text-error';
             case db.STATUS_SUCCESS:
-                return 'green';
             case db.STATUS_UNDEFINED:
-                return 'gray';
+                return 'text-success';
         }
         return '';
     };
@@ -786,11 +797,10 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     };
 
     /**
-     * Clear search filter field and cancel filtering. Invoked on close button click of the filter input.
+     * Clear search filter field and cancel filtering. Invoked on close button click in the filter input.
      */
     self.resetSearchFilter = function () {
         self.searchQuery(undefined);
-        //$('#worklog_jobs_search_filter').text('');
         self.allJobs.resetSearch();
     };
 
@@ -818,15 +828,11 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         return '';
     };
 
-    self.showEdit = function (item) {
+    self.canBeEdited = function (item) {
         return item && item.user_name === self.activeUser;
     };
 
-    self.edit = function (item) {
-        if (!item) return;
-    };
-
-    self.showPrintAgain = function (item) {
+    self.canBePrinted = function (item) {
         if (item && item.printer_name === self.activePrinter && filesLib.enablePrint() && self.octoprintFiles) {
             return _.contains(self.octoprintFiles[item.origin], item.file_path);
         }
@@ -834,14 +840,13 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     };
 
     self.printAgain = function (item) {
-        if (filesLib.listHelper.isSelected(item) && filesLib.enablePrint(item)) {
+        if (filesLib.listHelper.isSelectedByMatcher(function (data) {
+            return data && data.origin === item.origin && data.path === item.file_path;
+        }) && filesLib.enablePrint(item)) {
             // file was already selected, just start the print job
             OctoPrint.job.start();
         } else {
-            // select file, start print job (if requested and within dimensions)
-            var print = filesLib.evaluatePrintDimensions(item, true);
-
-            OctoPrint.files.select(item.origin, item.file_path, print);
+            OctoPrint.files.select(item.origin, item.file_path, true);
         }
     };
 
@@ -883,14 +888,15 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         self.allJobs.currentPage(0);
     };
 
-    self.processJobs = function processRequestedJobs(data) {
+    self.processJobs = function processRequestedJobs(data, opts) {
+        if (opts === 'notmodified') return;
         self.allJobs.updateItems(data.jobs);
     };
 
     self.requestJobs = function requestAllJobsFromBackend(force) {
         self.requestInProgress(true);
-        return api.job.list(force).done(function (response) {
-            self.processJobs(response);
+        return api.job.list(force, { ifModified: true }).done(function (response, opts) {
+            self.processJobs(response, opts);
         }).always(function () {
             self.requestInProgress(false);
         });
@@ -935,6 +941,128 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         self.requestInProgress(true);
         return OctoPrint.files.list(true).done(function (response) {
             self.processOctoprintFiles(response);
+        }).always(function () {
+            self.requestInProgress(false);
+        });
+    };
+};
+/* global WorkLog ko _ */
+
+WorkLog.prototype.viewModels.record = function recordEditDialogViewModel() {
+    var self = this.viewModels.record;
+    var api = this.core.client;
+    var jobs = this.viewModels.jobs;
+    var db = this.core.common.jobStatus;
+
+    var filesLib = this.core.bridge.allViewModels.filesViewModel;
+
+    var FAILED = gettext('Failed');
+    var SUCCESS = gettext('Printed');
+    var PRINTING = gettext(gettext('Printing'));
+
+    var statusEnableList = [{ name: FAILED, value: db.STATUS_FAIL_USER }, { name: SUCCESS, value: db.STATUS_SUCCESS }];
+
+    var statusDisableList = [{ name: FAILED, value: db.STATUS_FAIL_SYS }, { name: PRINTING, value: db.STATUS_UNDEFINED }];
+
+    self.statusDisabled = ko.observable(true);
+    self.statusList = ko.observableArray([]);
+
+    self.requestInProgress = ko.observable(false);
+
+    self.showRecordDialog = function (data) {
+        self.fromRecordData(data);
+        //~ $('#dialog_job_edit_worklog').on('shown.bs.modal', self.ajustTextarea);
+        $('#dialog_job_edit_worklog').modal('show');
+    };
+
+    //~ self.ajustTextarea = () => {
+    //~ $('#dialog_job_edit_worklog').find('textarea').each(function () {
+    //~ console.log($(this).height());
+    //~ $(this).height('1em');
+    //~ $(this).height($(this).prop('scrollHeight'));
+    //~ });
+    //~ }
+
+    self.hideRecordDialog = function () {
+        $('#dialog_job_edit_worklog').modal('hide');
+    };
+
+    /**
+     * Holds the data for the record dialog. Every change in the form will be reflected by this
+     * object.
+     */
+    self.loaded = {
+        id: ko.observable(),
+        file: ko.observable(),
+        location: ko.observable(),
+        fileExist: ko.observable(),
+        user: ko.observable(),
+        printer: ko.observable(),
+        start: ko.observable(),
+        end: ko.observable(),
+        status: ko.observable(),
+        tag: ko.observable(),
+        notes: ko.observable(''), // Should not be undefined
+        notesNew: ko.observable('')
+    };
+
+    /**
+     * Updates the 'loaded' object with the data from the given record.
+     */
+    self.fromRecordData = function (data) {
+        self.statusDisabled(_.findWhere(statusDisableList, { value: data.status }) !== undefined);
+        self.statusList(self.statusDisabled() ? [].concat(statusEnableList, statusDisableList) : statusEnableList);
+
+        self.loaded.id(data.id);
+        self.loaded.file(data.file);
+        self.loaded.location(data.origin + ': ' + data.file_path.slice(0, -data.file.length - 1));
+        self.loaded.fileExist(data.printer_name === jobs.activePrinter && _.contains(jobs.octoprintFiles[data.origin], data.file_path));
+        self.loaded.user(data.user_name);
+        self.loaded.printer(data.printer_name);
+        self.loaded.start(formatDate(data.start_time));
+        self.loaded.end(formatDate(data.end_time));
+        self.loaded.status(data.status);
+        self.loaded.tag(data.tag);
+        self.loaded.notes(data.notes);
+        self.loaded.notesNew('');
+    };
+
+    /**
+     * Returns a record object containing the data from the dialog
+     */
+    self.toRecordData = function () {
+        var sep = self.loaded.notes() ? '; ' : '';
+        var notesNew = self.loaded.notesNew() ? self.loaded.notesNew().trim() : '';
+
+        var response = {
+            id: self.loaded.id(),
+            tag: self.loaded.tag().trim(),
+            notes: self.loaded.notes() + (notesNew ? sep + notesNew : '')
+        };
+
+        if (!self.statusDisabled()) {
+            response['status'] = self.loaded.status();
+        }
+
+        return response;
+    };
+
+    /**
+     * Updates the passed record in the database.
+     */
+    self.updateRecord = function updateRecordInBackend() {
+        var data = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : self.toRecordData();
+
+        self.requestInProgress(true);
+        api.job.update(data.id, data).done(function () {
+            self.hideRecordDialog();
+            //~ self.requestRecords();
+        }).fail(function () {
+            PNotify.error({
+                title: gettext('Could not update record'),
+                text: gettext('There was an unexpected error while updating the job record, please consult the logs.'),
+                hide: false
+            });
         }).always(function () {
             self.requestInProgress(false);
         });

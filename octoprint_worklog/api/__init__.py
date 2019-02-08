@@ -214,7 +214,7 @@ class WorkLogApi(octoprint.plugin.BlueprintPlugin):
             self._logger.error("Failed to fetch lastmodified timestamp: {message}".format(message=str(e)))
 
         etag = entity_tag(lm)
-
+        
         if not force and check_lastmodified(lm) and check_etag(etag):
             return make_response("Not Modified", 304)
 

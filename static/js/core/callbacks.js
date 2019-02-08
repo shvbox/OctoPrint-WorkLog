@@ -30,20 +30,19 @@ WorkLog.prototype.core.callbacks = function octoprintCallbacks() {
         self.viewModels.config.saveData();
     };
 
-    self.onDataUpdaterPluginMessage = function onDataUpdaterPluginMessageCallback(plugin, data) {
+    self.onDataUpdaterPluginMessage = function onDataUpdaterPluginMessageCallback(plugin, message) {
         if (plugin !== 'worklog') return;
 
-        const msgType = data.type;
-        const msgData = data.data;
+        const { type, data } = message;
         // TODO needs improvement
-        if (msgType === 'data_changed') {
-            if (msgData.table === 'jobs') {
+        if (type === 'data_changed') {
+            if (data.table === 'jobs') {
                 self.viewModels.userFilter.requestUsers();
                 self.viewModels.printerFilter.requestPrinters();
                 self.viewModels.jobs.requestJobs();
-            } else if (msgData.table === 'users') {
+            } else if (data.table === 'users') {
                 self.viewModels.userFilter.requestUsers();
-            } else if (msgData.table === 'printers') {
+            } else if (data.table === 'printers') {
                 self.viewModels.printerFilter.requestPrinters();
             }
         }

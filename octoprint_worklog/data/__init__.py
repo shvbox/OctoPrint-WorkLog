@@ -25,8 +25,8 @@ class WorkLog(object):
 
     DB_VERSION = 1
 
-    STATUS_FAIL_USER = -2
-    STATUS_FAIL_SYS = -1
+    STATUS_FAIL_SYS = -2
+    STATUS_FAIL_USER = -1
     STATUS_UNDEFINED = 0
     STATUS_SUCCESS = 1
     
@@ -276,7 +276,7 @@ class WorkLog(object):
         #~ self._logger.info("get_active_job")
         resultDict = None
         with self.lock, self.conn.begin():
-            if not self._current_job_id is None:
+            if self._current_job_id is not None:
                 #~ self._logger.info("get_active_job: id = %s" % self._current_job_id)
                 stmt = select([self.jobs]).where(self.jobs.c.id == self._current_job_id)
                 result = self.conn.execute(stmt)
@@ -291,9 +291,9 @@ class WorkLog(object):
                     .limit(1)
                 result = self.conn.execute(stmt)
                 resultDict = self._result_to_dict(result, True)
-                if not resultDict is None:
+                if resultDict is not None:
                      self._current_job_id = resultDict.get("id")
-                     self._logger.info("Found stale job on client id=%s" % self._client_id)
+                     self._logger.info("Found stale job with id=%s on client id=%s" % (self._current_job_id, self._client_id))
 
         return resultDict
 
@@ -307,7 +307,7 @@ class WorkLog(object):
                     file=data["file"], origin=data["origin"], file_path=data["file_path"],
                     start_time=data["start_time"])
             result = self.conn.execute(stmt)
-        self._current_job_id = result.lastrowid
+        self._current_job_id = result.inserted_primary_key[0]
         data["id"] = self._current_job_id
         return data
 
@@ -316,8 +316,11 @@ class WorkLog(object):
         with self.lock, self.conn.begin():
             stmt = update(self.jobs)\
                 .where(self.jobs.c.id == identifier)\
-                .values(user_name=data["user_name"], end_time=data["end_time"],
-                        status=data["status"], notes=data["notes"])
+                .values(user_name=data["user_name"],
+                        end_time=data["end_time"],
+                        status=data["status"],
+                        tag=data["tag"],
+                        notes=data["notes"])
             self.conn.execute(stmt)
         return data
 

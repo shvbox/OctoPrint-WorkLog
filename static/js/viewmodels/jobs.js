@@ -16,10 +16,10 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
 
     self.octoprintFiles = undefined;
 
+    self.requestInProgress = ko.observable(true);
+
     self.totalQuantity = ko.observable(undefined);
     self.totalDuration = ko.observable(undefined);
-
-    self.requestInProgress = ko.observable(false);
 
     self.searchQuery = ko.observable(undefined);
     self.searchQuery.subscribe(() => { self.performSearch(); });
@@ -137,13 +137,6 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         self.totalDuration(formatDuration(duration));
     };
 
-    //~ self.jobStatusToggle = function processJobStatusDoubleClick(item) {
-        //~ if (!item || item.notes || item.status === db.STATUS_UNDEFINED || item.status === db.STATUS_FAIL_SYS) return;
-        //~ const itemCopy = item;
-        //~ itemCopy.status = item.status === db.STATUS_FAIL_USER ? db.STATUS_SUCCESS : db.STATUS_FAIL_USER;
-        //~ self.updateJob(itemCopy);
-    //~ };
-
     self.jobStatusText = (status) => {
         switch (status) { // eslint-disable-line default-case
         case db.STATUS_FAIL_SYS:
@@ -157,15 +150,14 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         return '';
     };
 
-    self.jobStatusColor = (status) => {
+    self.jobStatusClass = (status) => {
         switch (status) { // eslint-disable-line default-case
         case db.STATUS_FAIL_SYS:
         case db.STATUS_FAIL_USER:
-            return 'red';
+            return 'text-error';
         case db.STATUS_SUCCESS:
-            return 'green';
         case db.STATUS_UNDEFINED:
-            return 'gray';
+            return 'text-success';
         }
         return '';
     };
@@ -175,11 +167,10 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     self.jobNotes = notes => (notes ? `(${notes})` : '');
 
     /**
-     * Clear search filter field and cancel filtering. Invoked on close button click of the filter input.
+     * Clear search filter field and cancel filtering. Invoked on close button click in the filter input.
      */
     self.resetSearchFilter = () => {
         self.searchQuery(undefined);
-        //$('#worklog_jobs_search_filter').text('');
         self.allJobs.resetSearch();
     };
 
@@ -207,13 +198,9 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         return '';
     };
 
-    self.showEdit = item => item && item.user_name === self.activeUser;
+    self.canBeEdited = item => item && item.user_name === self.activeUser;
 
-    self.edit = (item) => {
-        if (!item) return;
-    };
-
-    self.showPrintAgain = (item) => {
+    self.canBePrinted = (item) => {
         if (item && item.printer_name === self.activePrinter && filesLib.enablePrint() && self.octoprintFiles) {
             return _.contains(self.octoprintFiles[item.origin], item.file_path);
         }
@@ -221,14 +208,13 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
     };
 
     self.printAgain = (item) => {
-        if (filesLib.listHelper.isSelected(item) && filesLib.enablePrint(item)) {
+        if (filesLib.listHelper.isSelectedByMatcher(data => (data && data.origin === item.origin
+            && data.path === item.file_path))
+            && filesLib.enablePrint(item)) {
             // file was already selected, just start the print job
             OctoPrint.job.start();
         } else {
-            // select file, start print job (if requested and within dimensions)
-            const print = filesLib.evaluatePrintDimensions(item, true);
-
-            OctoPrint.files.select(item.origin, item.file_path, print);
+            OctoPrint.files.select(item.origin, item.file_path, true);
         }
     };
 
@@ -269,14 +255,15 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
         self.allJobs.currentPage(0);
     };
 
-    self.processJobs = function processRequestedJobs(data) {
+    self.processJobs = function processRequestedJobs(data, opts) {
+        if (opts === 'notmodified') return;
         self.allJobs.updateItems(data.jobs);
     };
 
     self.requestJobs = function requestAllJobsFromBackend(force) {
         self.requestInProgress(true);
-        return api.job.list(force)
-            .done((response) => { self.processJobs(response); })
+        return api.job.list(force, { ifModified: true })
+            .done((response, opts) => { self.processJobs(response, opts); })
             .always(() => { self.requestInProgress(false); });
     };
 

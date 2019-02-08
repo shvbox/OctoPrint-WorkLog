@@ -14,13 +14,13 @@ WorkLog.prototype.viewModels.config = function configurationViewModel() {
     self.loadData = () => {
         const pluginSettings = settingsViewModel.settings.plugins.worklog;
         ko.mapping.fromJS(ko.toJS(pluginSettings), self.config);
-        console.log(self.config.database.useExternal());
-        console.log(self.config.database.uri());
-        console.log(self.config.database.user());
+        // console.log(self.config.database.useExternal());
+        // console.log(self.config.database.uri());
+        // console.log(self.config.database.user());
     };
 
     self.connectionTest = (viewModel, event) => {
-        console.log('connectionTest');
+        // console.log('connectionTest');
         const target = $(event.target);
         target.removeClass('btn-success btn-danger');
         target.prepend('<i class="fa fa-spinner fa-spin"></i> ');

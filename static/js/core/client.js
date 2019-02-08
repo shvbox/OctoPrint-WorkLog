@@ -5,19 +5,19 @@ WorkLog.prototype.core.client = function apiClient() {
 
     const pluginUrl = 'plugin/worklog';
 
-    const jobUrl = function apiJobNamespace(job) {
+    const jobUrl = function apiJobNamespace(id) {
         const url = `${pluginUrl}/jobs`;
-        return (job === undefined) ? url : `${url}/${job}`;
+        return (id === undefined) ? url : `${url}/${id}`;
     };
 
-    const userUrl = function apiUserNamespace(user) {
+    const userUrl = function apiUserNamespace(name) {
         const url = `${pluginUrl}/users`;
-        return (user === undefined) ? url : `${url}/${user}`;
+        return (name === undefined) ? url : `${url}/${name}`;
     };
 
-    const printerUrl = function apiPrinterNamespace(printer) {
+    const printerUrl = function apiPrinterNamespace(name) {
         const url = `${pluginUrl}/printers`;
-        return (printer === undefined) ? url : `${url}/${printer}`;
+        return (name === undefined) ? url : `${url}/${name}`;
     };
 
     //~ const totalsUrl = function apiTotalsNamespace() {

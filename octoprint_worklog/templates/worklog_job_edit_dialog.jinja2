@@ -1,0 +1,102 @@
+<div id="dialog_job_edit_worklog" class="modal hide fade">
+
+    <div class="modal-header">
+        <a href="#" class="close" data-dismiss="modal" aria-hidden="true">&times;</a>
+        <h3>{{ _('Job record') }} <i class="fa fa-spinner" data-bind="visible: viewModels.record.requestInProgress(), css: {'fa-spin': viewModels.record.requestInProgress()}"></i></h3>
+    </div>
+
+    <div class="modal-body">
+
+        <form class="form-horizontal">
+
+            <!-- file name -->
+
+            <div class="control-group">
+                <label class="control-label">{{ _('File Name') }}</label>
+                <div class="controls">
+                    <p class="worklog-field-disabled" data-bind="text: viewModels.record.loaded.file, style: { color: viewModels.record.loaded.fileExist() ? '' : '#b94a48' }"></p>
+                </div>
+            </div>
+
+            <!-- location -->
+
+            <div class="control-group">
+                <label class="control-label">{{ _('File Location') }}</label>
+                <div class="controls">
+                    <p class="worklog-field-disabled" data-bind="text: viewModels.record.loaded.location, style: { color: viewModels.record.loaded.fileExist() ? '' : '#b94a48' }"></p>
+                </div>
+            </div>
+
+            <!-- printer -->
+
+            <div class="control-group">
+                <label class="control-label">{{ _('Printer') }}</label>
+                <div class="controls">
+                    <p class="worklog-field-disabled" data-bind="text: viewModels.record.loaded.printer"></p>
+                </div>
+            </div>
+
+            <!-- user -->
+
+            <div class="control-group">
+                <label class="control-label">{{ _('User') }}</label>
+                <div class="controls">
+                    <p class="worklog-field-disabled" data-bind="text: viewModels.record.loaded.user"></p>
+                </div>
+            </div>
+
+            <!-- start -->
+
+            <div class="control-group">
+                <label class="control-label">{{ _('Start') }}</label>
+                <div class="controls">
+                    <p class="worklog-field-disabled" data-bind="text: viewModels.record.loaded.start"></p>
+                </div>
+            </div>
+
+            <!-- end -->
+
+            <div class="control-group">
+                <label class="control-label">{{ _('End') }}</label>
+                <div class="controls">
+                    <p class="worklog-field-disabled" data-bind="text: viewModels.record.loaded.end"></p>
+                </div>
+            </div>
+
+            <!-- status -->
+
+            <div class="control-group">
+                <label class="control-label">{{ _('Status') }}</label>
+                <div class="controls">
+                    <select data-bind="options: viewModels.record.statusList, optionsText: 'name', optionsValue: 'value', value: viewModels.record.loaded.status, attr: { disabled: viewModels.record.statusDisabled }"></select>
+                </div>
+            </div>
+
+            <!-- tag -->
+
+            <div class="control-group">
+                <label class="control-label">{{ _('Tag') }}</label>
+                <div class="controls">
+                    <input type="text" data-bind="value: viewModels.record.loaded.tag">
+                </div>
+            </div>
+
+            <!-- notes -->
+
+            <div class="control-group">
+                <label class="control-label">{{ _('Notes') }}</label>
+                <div class="controls">
+                    <p class="worklog-field-disabled" data-bind="text: viewModels.record.loaded.notes, visible: viewModels.record.loaded.notes" style="margin-bottom: 13px;"></p>
+                    <textarea rows="2" style="resize: vertical" data-bind="value: viewModels.record.loaded.notesNew, attr: { maxlength: 253 - viewModels.record.loaded.notes().length}"></textarea>
+                </div>
+            </div>
+
+        </form>
+    </div>
+
+    <div class="modal-footer">
+        <button class="btn" data-dismiss="modal" aria-hidden="true">{{ _('Cancel') }}</button>
+        <button class="btn btn-primary" data-bind="click: function() { viewModels.record.updateRecord(viewModels.record.toRecordData()); }">{{ _('Save') }}</button>
+    </div>
+
+</div>

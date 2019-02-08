@@ -1,7 +1,7 @@
         
 <!-- filter -->
 
-<div id="worklog_history_header" class="" style="">
+<div id="worklog_history_header">
     <div class="form-inline">
         <div class="control-group worklog-filter" title="{{ _('Select user') }}">
             <label class="control-label">{{ _('User') }}</label>
@@ -13,7 +13,7 @@
         </div>
         <div class="control-group worklog-filter" title="{{ _('Select status') }}">
             <label class="control-label">{{ _('Status') }}</label>
-            <select data-bind="options: viewModels.statusFilter.allItems, optionsText: 'name', optionsValue: 'value', optionsCaption: '{{ _('All') }}', value: viewModels.statusFilter.selected, event: { change: viewModels.printerFilter.changed }"></select>
+            <select data-bind="options: viewModels.statusFilter.allItems, optionsText: 'name', optionsValue: 'value', optionsCaption: '{{ _('All') }}', value: viewModels.statusFilter.selected, event: { change: viewModels.statusFilter.changed }"></select>
         </div>
         <div class="control-group worklog-filter" title="{{ _('Select period') }}">
             <label class="control-label">{{ _('Period') }}</label>
@@ -91,15 +91,15 @@
                 </tr>
             </thead>
             <tbody data-bind="foreach: viewModels.jobs.allJobs.paginatedItems">
-                <tr>
+                <tr data-bind="style: { fontWeight: status === 0 ? 'bold' : '' }">
                     <td>
                         <span data-bind="text: file, attr: { title: origin + ': ' + file_path }"></span>
                         <br>
                         <div>
-                            <span data-bind="text: $root.viewModels.jobs.jobStatusText(status), style: { color: $root.viewModels.jobs.jobStatusColor(status) }"></span>
+                            <span data-bind="text: $root.viewModels.jobs.jobStatusText(status), css: $root.viewModels.jobs.jobStatusClass(status)"></span>
                             <span style="font-style: italic; color: gray;" data-bind="text: $root.viewModels.jobs.jobTag(tag)"></span>
                             <span style="font-style: italic; color: gray;" data-bind="text: $root.viewModels.jobs.jobNotes(notes)"></span>
-                            <a href="#" class="fa fa-pencil worklog-action" title="{{ _('Edit') }}" data-bind="click: function() { $root.viewModels.jobs.edit($data); }, visible: $root.viewModels.jobs.showEdit($data)"></a>
+                            <a href="#" class="fa fa-pencil worklog-action" title="{{ _('Edit') }}" data-bind="click: function() { $root.viewModels.record.showRecordDialog($data); }, visible: $root.viewModels.jobs.canBeEdited($data)"></a>
                         </div>
                     </td>
                     <td style="white-space: nowrap">
@@ -113,7 +113,7 @@
                         <span data-bind="text: formatDuration(duration), attr: { title: formatDate(end_time) }"></span>
                     </td>
                     <td class="worklog-action-column">
-                        <a href="#" class="fa fa-print worklog-action" title="{{ _('Print again') }}" data-bind="click: function() { $root.viewModels.jobs.printAgain($data); }, visible: $root.viewModels.jobs.showPrintAgain($data)"></a>
+                        <a href="#" class="fa fa-print worklog-action" title="{{ _('Print again') }}" data-bind="click: function() { $root.viewModels.jobs.printAgain($data); }, visible: $root.viewModels.jobs.canBePrinted($data)"></a>
                     </td>
                 </tr>
             </tbody>

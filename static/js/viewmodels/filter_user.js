@@ -29,26 +29,37 @@ WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
 
     self.test = value => self.selected() === undefined || value === self.value();
 
-    self.processUsers = (data) => {
+    self.processUsers = (data, opts) => {
+        // console.log(opts);
+        if (opts === 'notmodified') return;
+        
+        const firstRun = self.allItems().length === 0;
+        //~ let userInList = undefined;
+        let userInList = false;
         let { users } = data;
+
         if (users === undefined) {
             users = [];
         } else if (self.activeUser) {
-            const userInList = _.find(users, entry => entry.name === self.activeUser);
+            //~ userInList = _.find(users, entry => entry.name === self.activeUser);
+            userInList = _.findWhere(users, { name: self.activeUser }) !== undefined;
             if (userInList) {
                 users = [{ name: THIS }, ...users];
             }
         }
+
         self.allItems(users);
 
-        self.selected(self.activeUser);
-        self.changed();
+        if (firstRun) {
+            self.selected(userInList ? self.activeUser : undefined);
+            self.changed();
+        }
     };
 
     self.requestUsers = (force) => {
         self.requestInProgress(true);
-        return api.user.list(force)
-            .done((response) => { self.processUsers(response); })
+        return api.user.list(force, { ifModified: true })
+            .done((response, opts) => { self.processUsers(response, opts); })
             .always(() => { self.requestInProgress(false); });
     };
 };
