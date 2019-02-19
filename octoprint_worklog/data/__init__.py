@@ -5,14 +5,17 @@ __author__ = "Alexander Shvetsov <shv-box@mail.com>"
 __license__ = "GNU Affero General Public License http://www.gnu.org/licenses/agpl.html"
 __copyright__ = "Copyright (C) 2019 Alexander Shvetsov - Released under terms of the AGPLv3 License"
 
+import io
 import os
 import sqlite3
 
 from multiprocessing import Lock
 from uritools import urisplit
+from backports import csv
+
 from sqlalchemy.engine.url import URL
 from sqlalchemy import create_engine, event, text
-from sqlalchemy.schema import MetaData, Table, Column, DDL, PrimaryKeyConstraint
+from sqlalchemy.schema import MetaData, Table, Column, DDL
 from sqlalchemy.sql import insert, update, delete, select, label, case, func
 from sqlalchemy.types import Integer, String, TIMESTAMP
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -29,7 +32,7 @@ class WorkLog(object):
     STATUS_FAIL_USER = -1
     STATUS_UNDEFINED = 0
     STATUS_SUCCESS = 1
-    
+
     def __init__(self, config, logger):
         self._db_path = config["uri"].replace("sqlite:///", "")
         self._client_id = config["clientID"]
@@ -37,7 +40,7 @@ class WorkLog(object):
         self._current_job_id = None
 
         self.notifier = None
-        self.conn = self.connect(config.get("uri", ""),
+        self.db = self.get_database(config.get("uri", ""),
                         database=config.get("name", ""),
                         username=config.get("user", ""),
                         password=config.get("password", ""))
@@ -49,9 +52,10 @@ class WorkLog(object):
         #~ el
         if self.engine_dialect_is(Dialect.postgresql):
             # Create listener thread
-            self.notifier = PGNotify(self.conn.engine.url)
+            self.notifier = PGNotify(self.db.url)
 
-    def connect(self, uri, database="", username="", password=""):
+    def get_database(self, uri, database="", username="", password=""):
+        uri_parts = urisplit(uri)
         uri_parts = urisplit(uri)
 
         if uri_parts.scheme == Dialect.sqlite:
@@ -63,17 +67,14 @@ class WorkLog(object):
                       database=database,
                       username=username,
                       password=password)
-            engine = create_engine(uri)
+            engine = create_engine(uri, pool_pre_ping=True)
         else:
-            raise ValueError("Engine '{engine}' not supported".format(engine=uri_parts.scheme))
+            raise ValueError("Database engine '{engine}' not supported".format(engine=uri_parts.scheme))
 
-        return engine.connect()
-
-    def close(self):
-        self.conn.close()
+        return engine
 
     def engine_dialect_is(self, dialect):
-        return self.conn.engine.dialect.name == dialect if self.conn is not None else False
+        return self.db.dialect.name == dialect if self.db is not None else False
 
     def initialize(self):
         metadata = MetaData()
@@ -108,11 +109,11 @@ class WorkLog(object):
 
         if self.engine_dialect_is(Dialect.postgresql):
             def should_create_function(name):
-                row = self.conn.execute("select proname from pg_proc where proname = '%s'" % name).scalar()
+                row = self.db.execute("select proname from pg_proc where proname = '%s'" % name).scalar()
                 return not bool(row)
 
             def should_create_trigger(name):
-                row = self.conn.execute("select tgname from pg_trigger where tgname = '%s'" % name).scalar()
+                row = self.db.execute("select tgname from pg_trigger where tgname = '%s'" % name).scalar()
                 return not bool(row)
 
             update_lastmodified_ddl = DDL("""
@@ -206,80 +207,86 @@ class WorkLog(object):
                         """.format(name=name, table=table, action=action))
                     event.listen(metadata, "after_create", trigger)
 
-        metadata.create_all(self.conn, checkfirst=True)
+        metadata.create_all(self.db, checkfirst=True)
 
         # Check database version
         schemaVersion = self.get_schema_version()
-        
+
         if schemaVersion is None:
             self.set_schema_version(self.DB_VERSION)
             schemaVersion = self.DB_VERSION
-            
+
         self._logger.info("Schema version: %s" % schemaVersion)
 
     # versioning
 
     def get_schema_version(self):
-        with self.lock, self.conn.begin():
-            return self.conn.execute(select([func.max(self.version.c.id)])).scalar()
+        with self.lock:
+            return self.db.execute(select([func.max(self.version.c.id)])).scalar()
 
     def set_schema_version(self, version):
-        with self.lock, self.conn.begin():
-            self.conn.execute(insert(self.version).values((version,)))
-            self.conn.execute(delete(self.version).where(self.version.c.id < version))
+        conn = self.db.connect();
+        try:
+            with self.lock, conn.begin():
+                conn.execute(insert(self.version).values((version,)))
+                conn.execute(delete(self.version).where(self.version.c.id < version))
+        except Exception as e:
+            self._logger.error("Could not set schema version: {message}".format(message=str(e)))
+        else:
+            conn.close()
 
     # modifications
 
     def get_lastmodified(self):
-        with self.lock, self.conn.begin():
+        with self.lock:
             stmt = select([func.max(self.modifications.c.changed_at)])
-            return self.conn.execute(stmt).scalar()
+            return self.db.execute(stmt).scalar()
 
     def get_table_lastmodified(self, table):
-        with self.lock, self.conn.begin():
+        with self.lock:
             stmt = select([self.modifications.c.changed_at]).where(self.modifications.c.table_name == table)
-            return self.conn.execute(stmt).scalar()
-        
+            return self.db.execute(stmt).scalar()
+
     def get_jobs_lastmodified(self):
         return self.get_table_lastmodified("jobs")
-        
+
     def get_users_lastmodified(self):
         return self.get_table_lastmodified("users")
-        
+
     def get_printers_lastmodified(self):
         return self.get_table_lastmodified("printers")
-        
+
     # jobs
 
     def get_all_jobs(self):
         #~ self._logger.info("get_all_jobs")
-        with self.lock, self.conn.begin():
+        with self.lock:
             stmt = select(\
                     [self.jobs,\
                     case([(self.jobs.c.end_time < self.jobs.c.start_time, text("0"))],
                     else_=self.jobs.c.end_time - self.jobs.c.start_time).label("duration")])
-            result = self.conn.execute(stmt)
+            result = self.db.execute(stmt)
         return self._result_to_dict(result)
-        
+
     def get_job(self, identifier):
         #~ self._logger.info("get_job")
-        with self.lock, self.conn.begin():
+        with self.lock:
             stmt = select(\
                     [self.jobs,\
                     case([(self.jobs.c.end_time < self.jobs.c.start_time, text("0"))],
                     else_=self.jobs.c.end_time - self.jobs.c.start_time).label("duration")])\
                 .where(self.jobs.c.id == identifier)
-            result = self.conn.execute(stmt)
+            result = self.db.execute(stmt)
         return self._result_to_dict(result, True)
 
     def get_active_job(self):
-        #~ self._logger.info("get_active_job")
+        self._logger.info("get_active_job")
         resultDict = None
-        with self.lock, self.conn.begin():
+        with self.lock:
             if self._current_job_id is not None:
                 #~ self._logger.info("get_active_job: id = %s" % self._current_job_id)
                 stmt = select([self.jobs]).where(self.jobs.c.id == self._current_job_id)
-                result = self.conn.execute(stmt)
+                result = self.db.execute(stmt)
                 resultDict = self._result_to_dict(result, True)
 
             if resultDict is None:
@@ -287,33 +294,60 @@ class WorkLog(object):
                 stmt = select([self.jobs])\
                     .where((self.jobs.c.client_id == self._client_id)\
                         & (self.jobs.c.status == self.STATUS_UNDEFINED))\
-                    .order_by(self.jobs.c.start_time)\
+                    .order_by(self.jobs.c.start_time.desc())\
                     .limit(1)
-                result = self.conn.execute(stmt)
+                result = self.db.execute(stmt)
                 resultDict = self._result_to_dict(result, True)
                 if resultDict is not None:
                      self._current_job_id = resultDict.get("id")
                      self._logger.info("Found stale job with id=%s on client id=%s" % (self._current_job_id, self._client_id))
 
+        self._logger.info(resultDict)
         return resultDict
+
+    #~ def get_active_job(self):
+        #~ self._logger.info("get_active_job")
+        #~ resultDict = None
+        #~ with self.lock, self.conn.begin():
+            #~ if self._current_job_id is not None:
+                # self._logger.info("get_active_job: id = %s" % self._current_job_id)
+                #~ stmt = select([self.jobs]).where(self.jobs.c.id == self._current_job_id)
+                #~ result = self.conn.execute(stmt)
+                #~ resultDict = self._result_to_dict(result, True)
+#~
+            #~ if resultDict is None:
+                # self._logger.info("get_active_job: client_id = %s" % self._client_id)
+                #~ stmt = select([self.jobs])\
+                    #~ .where((self.jobs.c.client_id == self._client_id)\
+                        #~ & (self.jobs.c.status == self.STATUS_UNDEFINED))\
+                    #~ .order_by(self.jobs.c.start_time.desc())\
+                    #~ .limit(1)
+                #~ result = self.conn.execute(stmt)
+                #~ resultDict = self._result_to_dict(result, True)
+                #~ if resultDict is not None:
+                     #~ self._current_job_id = resultDict.get("id")
+                     #~ self._logger.info("Found stale job with id=%s on client id=%s" % (self._current_job_id, self._client_id))
+#~
+        #~ self._logger.info(resultDict)
+        #~ return resultDict
 
     def start_job(self, data):
         #~ self._logger.info("start_job")
         data["client_id"] = self._client_id
-        with self.lock, self.conn.begin():
+        with self.lock:
             stmt = insert(self.jobs)\
                 .values(client_id=data["client_id"],
                     printer_name=data["printer_name"], user_name=data["user_name"],
                     file=data["file"], origin=data["origin"], file_path=data["file_path"],
                     start_time=data["start_time"])
-            result = self.conn.execute(stmt)
+            result = self.db.execute(stmt)
         self._current_job_id = result.inserted_primary_key[0]
         data["id"] = self._current_job_id
         return data
 
     def update_job(self, identifier, data):
         #~ self._logger.info("update_job")
-        with self.lock, self.conn.begin():
+        with self.lock:
             stmt = update(self.jobs)\
                 .where(self.jobs.c.id == identifier)\
                 .values(user_name=data["user_name"],
@@ -321,8 +355,21 @@ class WorkLog(object):
                         status=data["status"],
                         tag=data["tag"],
                         notes=data["notes"])
-            self.conn.execute(stmt)
+            self.db.execute(stmt)
         return data
+
+    #~ def update_job(self, identifier, data):
+        # self._logger.info("update_job")
+        #~ with self.lock, self.conn.begin():
+            #~ stmt = update(self.jobs)\
+                #~ .where(self.jobs.c.id == identifier)\
+                #~ .values(user_name=data["user_name"],
+                        #~ end_time=data["end_time"],
+                        #~ status=data["status"],
+                        #~ tag=data["tag"],
+                        #~ notes=data["notes"])
+            #~ self.conn.execute(stmt)
+        #~ return data
 
     def finish_job(self, identifier, data):
         #~ self._logger.info("finish_job")
@@ -333,7 +380,7 @@ class WorkLog(object):
 
     #~ def get_job_totals(self, conditions):
         #~ sql = """\
-        #~ SELECT 
+        #~ SELECT
             #~ COUNT(id) AS total_quantity,
             #~ SUM(CASE WHEN (end_time < start_time) THEN 0 ELSE end_time - start_time END) AS total_duration
         #~ FROM v_jobs
@@ -350,35 +397,78 @@ class WorkLog(object):
         #~ result = self._result_to_dict(cur, True)
         #~ conn.close()
         #~ return result
-        
+
     def get_all_users(self):
         #~ self._logger.info("get_all_users")
-        with self.lock, self.conn.begin():
+        with self.lock:
             stmt = select([self.users]).order_by(self.users.c.name)
-            result = self.conn.execute(stmt)
+            result = self.db.execute(stmt)
         return self._result_to_dict(result)
 
     def get_user(self, name):
         #~ self._logger.info("get_user")
-        with self.lock, self.conn.begin():
+        with self.lock:
             stmt = select([self.users]).where(self.users.c.name == name)
-            result = self.conn.execute(stmt)
+            result = self.db.execute(stmt)
         return self._result_to_dict(result)
 
     def get_all_printers(self):
         #~ self._logger.info("get_all_printers")
-        with self.lock, self.conn.begin():
+        with self.lock:
             stmt = select([self.printers]).order_by(self.printers.c.name)
-            result = self.conn.execute(stmt)
+            result = self.db.execute(stmt)
         return self._result_to_dict(result)
 
     def get_printer(self, name):
         #~ self._logger.info("get_printer")
-        with self.lock, self.conn.begin():
+        with self.lock:
             stmt = select([self.printers]).where(self.printers.c.name == name)
-            result = self.conn.execute(stmt)
+            result = self.db.execute(stmt)
         return self._result_to_dict(result)
-        
+
+    def export_data(self, dirpath):
+        def to_csv(table):
+            with self.lock:
+                result = self.db.execute(select([table]))
+                filepath = os.path.join(dirpath, table.name + ".csv")
+                with io.open(filepath, mode="w", encoding="utf-8") as csv_file:
+                    csv_writer = csv.writer(csv_file)
+                    csv_writer.writerow(table.columns.keys())
+                    csv_writer.writerows(result)
+
+        tables = [self.jobs]
+        for t in tables:
+            to_csv(t)
+
+    def import_data(self, dirpath):
+        def from_csv(table):
+            filepath = os.path.join(dirpath, table.name + ".csv")
+            with io.open(filepath, mode="r", encoding="utf-8") as csv_file:
+                csv_reader = csv.reader(csv_file)
+                header = next(csv_reader)
+                conn = self.db.connect()
+                with self.lock, conn.begin():
+                    for row in csv_reader:
+                        values = dict(zip(header, row))
+                        del values['id']
+                        if self.engine_dialect_is(Dialect.sqlite):
+                            stmt = insert(table).values(values)
+                            conn.execute(stmt)
+                        elif self.engine_dialect_is(Dialect.postgresql):
+                            stmt = pg_insert(table).values(values)\
+                                .on_conflict_do_update(index_elements=[table.c.id], set_=values)
+                            conn.execute(stmt)
+
+                    if self.engine_dialect_is(Dialect.postgresql):
+                        # update sequence
+                        sql = "SELECT setval('{table}_id_seq', max(id)) FROM {table}".format(table=table.name)
+                        conn.execute(text(sql))
+                conn.close()
+
+        tables = [self.jobs]
+        for t in tables:
+            from_csv(t)
+
     # helpers
 
     def _result_to_dict(self, result, one=False):
@@ -390,9 +480,8 @@ class WorkLog(object):
 
     def _get_compiled_sql(self, stmt):
         try:
-            return str(stmt.compile(dialect=self.conn.engine.dialect))
+            return str(stmt.compile(dialect=self.db.dialect))
         except Exception as e:
             self._logger.error("Failed to compile SQL: {message}".format(message=str(e)))
 
         return "ERROR"
-            

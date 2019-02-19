@@ -212,6 +212,7 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             && data.path === item.file_path))
             && filesLib.enablePrint(item)) {
             // file was already selected, just start the print job
+            // console.log(item);
             OctoPrint.job.start();
         } else {
             OctoPrint.files.select(item.origin, item.file_path, true);

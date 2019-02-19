@@ -12,7 +12,7 @@ plugin_author_email = "shv-box@mail.com"
 plugin_url = "https://github.com/shvbox/OctoPrint-WorkLog"
 plugin_license = "AGPLv3"
 plugin_requires = ["uritools>=2.1,<2.2",
-                   "SQLAlchemy>=1.1.15,<1.2"]
+                   "SQLAlchemy>=1.2"]
 
 ### --------------------------------------------------------------------------------------------------------------------
 ### More advanced options that you usually shouldn't have to touch follow after this point

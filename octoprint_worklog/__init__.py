@@ -85,7 +85,7 @@ class WorkLogPlugin(WorkLogApi,
             #~ if self.work_log.notifier is not None:
                 #~ self.work_log.notifier.unsubscribe(self.process_notification)
                 
-            self.work_log.close()
+            #~ self.work_log.close()
        
     ##~~ SettingsPlugin mixin
     def get_settings_version(self):
@@ -196,6 +196,8 @@ class WorkLogPlugin(WorkLogApi,
         currentJob = self.work_log.get_active_job()
         if currentJob == None:
             self._logger.error("Can't retrieve id for current job. ID = %s" % self.get_client_id())
+            self.stop_timer()
+            return
 
         full_data = dict_merge(currentJob, data)
         self.work_log.finish_job(currentJob["id"], full_data)
@@ -227,7 +229,7 @@ class WorkLogPlugin(WorkLogApi,
 
         self._logger.debug("Starting timer for print time updates")
         from octoprint.util import RepeatedTimer
-        self._timer = RepeatedTimer(60, self.timer_task, run_first=False)
+        self._timer = RepeatedTimer(20, self.timer_task, run_first=False)
         self._timer.start()
         
     def stop_timer(self):
@@ -239,7 +241,10 @@ class WorkLogPlugin(WorkLogApi,
 
     def timer_task(self):
         data = { "end_time": time.time() }
-        self.update_current_job(data)
+        try:
+            self.update_current_job(data)
+        except Exception as e:
+            self._logger.error("Could not update job time: {message}".format(message=str(e)))
 
     #~~ Softwareupdate hook
     def get_update_information(self):

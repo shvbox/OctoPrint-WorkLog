@@ -619,6 +619,65 @@ WorkLog.prototype.viewModels.userFilter = function userFilterViewModel() {
         });
     };
 };
+/* global WorkLog ko $ PNotify gettext */
+
+WorkLog.prototype.viewModels.import = function importDataViewModel() {
+    var self = this.viewModels.import;
+
+    var importButton = $('#settings_plugin_worklog_import_button');
+    var importElement = $('#settings_plugin_worklog_import');
+
+    self.importFilename = ko.observable();
+    self.importInProgress = ko.observable(false);
+
+    self.afterImportCallbacks = [];
+
+    self.invalidArchive = ko.pureComputed(function () {
+        var name = self.importFilename();
+        return name !== undefined && !name.toLocaleLowerCase().endsWith('.zip');
+    });
+
+    self.enableImport = ko.pureComputed(function () {
+        var name = self.importFilename();
+        return name !== undefined && name.trim() !== '' && !self.invalidArchive();
+    });
+
+    importElement.fileupload({
+        dataType: 'json',
+        maxNumberOfFiles: 1,
+        autoUpload: false,
+        add: function add(e, data) {
+            if (data.files.length === 0) return;
+
+            self.importFilename(data.files[0].name);
+
+            importButton.unbind('click');
+            importButton.bind('click', function (event) {
+                self.importInProgress(true);
+                event.preventDefault();
+                data.submit();
+            });
+        },
+        done: function done() {
+            self.afterImportCallbacks.forEach(function (callback) {
+                callback();
+            });
+        },
+        fail: function fail() {
+            new PNotify({ // eslint-disable-line no-new
+                title: gettext('Data import failed'),
+                text: gettext('Something went wrong, please consult the logs.'),
+                type: 'error',
+                hide: false
+            });
+        },
+        always: function always() {
+            importButton.unbind('click');
+            self.importFilename(undefined);
+            self.importInProgress(false);
+        }
+    });
+};
 /* global WorkLog ItemListHelper ko gettext Utils OctoPrint PNotify formatDuration _ */
 
 WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
@@ -844,6 +903,7 @@ WorkLog.prototype.viewModels.jobs = function jobsViewModel() {
             return data && data.origin === item.origin && data.path === item.file_path;
         }) && filesLib.enablePrint(item)) {
             // file was already selected, just start the print job
+            // console.log(item);
             OctoPrint.job.start();
         } else {
             OctoPrint.files.select(item.origin, item.file_path, true);
